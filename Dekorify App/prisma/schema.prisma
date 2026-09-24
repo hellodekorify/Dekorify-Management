@@ -1,0 +1,1068 @@
+// =============================================================================
+// Dekorify Finance - database schema
+// =============================================================================
+//
+// MONEY: every monetary column is a BigInt holding *minor units* (paisa/cents),
+// never a float. `150000` means PKR 1,500.00. All arithmetic happens on these
+// integers; conversion to a human-readable decimal happens only at the edge.
+// This is why the schema is portable between SQLite and PostgreSQL without any
+// behavioural difference.
+//
+// FX: `fxRateE8` is the rate to the store's base currency, scaled by 1e8.
+// `baseAmountMinor` is the pre-converted value in base currency, so every
+// report sums integers and never re-multiplies at read time.
+//
+// TO SWITCH TO POSTGRESQL: change `provider` below to "postgresql" and point
+// DATABASE_URL at your server. No other change is required.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Identity
+// -----------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+
+  stores        StoreMember[]
+  sessions      Session[]
+  resetTokens   PasswordResetToken[]
+  auditLogs     AuditLog[]
+  importBatches ImportBatch[]
+
+  trackingEvents TrackingEvent[]
+  orderNotes     OrderNote[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// Store (a business / Shopify shop). One account may hold several.
+// -----------------------------------------------------------------------------
+
+model Store {
+  id           String   @id @default(cuid())
+  name         String
+  baseCurrency String   @default("PKR")
+  timezone     String   @default("Asia/Karachi")
+  fiscalYearStartMonth Int @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Shopify connection. Credentials come from env; only the per-shop grant is
+  // stored here, and only once a user completes OAuth.
+  shopifyDomain      String?
+  shopifyAccessToken String?
+  shopifyScope       String?
+  shopifyConnectedAt DateTime?
+  shopifyLastSyncAt  DateTime?
+  shopifyWebhookSecret String?
+
+  // Order tracking. Courier credentials live on Courier, not here.
+  ordersLastSyncAt   DateTime?
+  trackingLastSyncAt DateTime?
+
+  members           StoreMember[]
+  expenseCategories ExpenseCategory[]
+  expenses          Expense[]
+  recurringExpenses RecurringExpense[]
+  sales             Sale[]
+  cogsEntries       CogsEntry[]
+  adSpends          AdSpend[]
+  products          Product[]
+  suppliers         Supplier[]
+  cashAccounts      CashAccount[]
+  cashEntries       CashEntry[]
+  importBatches     ImportBatch[]
+  exchangeRates     ExchangeRate[]
+  settings          Setting[]
+  auditLogs         AuditLog[]
+
+  couriers    Courier[]
+  orders      Order[]
+  shipments   Shipment[]
+  syncLogs    SyncLog[]
+  orderNotes  OrderNote[]
+
+  leopardsShipments LeopardsShipment[]
+}
+
+/// A parcel as Leopards knows it.
+///
+/// Deliberately standalone: it carries no relation to Order, so the tracking
+/// dashboard keeps working whether or not the store is connected to Shopify.
+/// Every descriptive field here is copied from a Leopards response and is null
+/// when Leopards did not supply it — nothing is inferred or filled in.
+model LeopardsShipment {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  /// CN number. The only identifier Leopards accepts for tracking.
+  trackingNumber String
+  /// `booked_packet_order_id` — whatever reference was given at booking.
+  referenceNumber String?
+  /// Leopards' own internal id for the packet.
+  packetId String?
+
+  /// Leopards' wording, stored verbatim.
+  courierStatus String?
+  /// Our bucket, derived from the above. See lib/leopards/statuses.ts.
+  status String @default("UNKNOWN")
+  /// True once the parcel reaches an end state, so polling can stop.
+  isTerminal Boolean @default(false)
+
+  currentLocation String?
+  lastEventAt     DateTime?
+
+  originCity      String?
+  originCountry   String?
+  destinationCity String?
+
+  consigneeName    String?
+  consigneePhone   String?
+  consigneeEmail   String?
+  consigneeAddress String?
+
+  shipperName         String?
+  specialInstructions String?
+  statusRemarks       String?
+  reverseCn           String?
+
+  weightGrams  Int?
+  pieces       Int?
+  /// As Leopards states it, in rupees. A string because it is theirs, not ours.
+  codAmount    String?
+  bookedAt     DateTime?
+  deliveredAt  DateTime?
+  /// Counted from tracking events, never typed by hand.
+  deliveryAttempts Int @default(0)
+
+  /// How this CN entered the system. Leopards cannot list our shipments, so
+  /// something has to put them here. See docs in lib/leopards/intake.ts.
+  source String @default("MANUAL") // MANUAL | CSV | BOOKED
+
+  lastSyncedAt  DateTime?
+  lastSyncOkAt  DateTime?
+  lastSyncError String?
+  /// The last packet object exactly as Leopards returned it, so any displayed
+  /// value can be traced back to its source.
+  rawResponse   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events LeopardsTrackingEvent[]
+
+  @@unique([storeId, trackingNumber])
+  @@index([storeId, status])
+  @@index([storeId, isTerminal, lastSyncedAt])
+  @@index([storeId, lastEventAt])
+}
+
+/// One row of Leopards' "Tracking Detail" array, stored as given.
+model LeopardsTrackingEvent {
+  id         String           @id @default(cuid())
+  shipmentId String
+  shipment   LeopardsShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  /// Leopards' exact wording, e.g. "Arrived at Station in GUJRANWALA".
+  status String
+  /// Their `Status_With_City` variant, which is where the location hides.
+  statusWithCity String?
+  /// Parsed out of the status text; null when no city could be identified.
+  location     String?
+  receiverName String?
+  reason       String?
+
+  occurredAt DateTime?
+  /// The original date and time strings, kept because occurredAt is derived.
+  rawDate String?
+  rawTime String?
+
+  /// Marks the event as a delivery attempt, for the attempts count.
+  isAttempt Boolean @default(false)
+
+  retrievedAt DateTime @default(now())
+
+  /// Identifies the event for deduplication across repeated syncs.
+  fingerprint String
+
+  @@unique([shipmentId, fingerprint])
+  @@index([shipmentId, occurredAt])
+}
+
+model StoreMember {
+  id      String @id @default(cuid())
+  userId  String
+  storeId String
+  role    String @default("OWNER") // OWNER | ADMIN | VIEWER
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, storeId])
+  @@index([storeId])
+}
+
+model Setting {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  key     String
+  value   String // JSON-encoded
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, key])
+}
+
+// -----------------------------------------------------------------------------
+// Expenses
+// -----------------------------------------------------------------------------
+
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name      String
+  // OPERATING = below the gross-profit line, FULFILMENT = direct cost of
+  // delivering an order, OTHER = appropriations (zakat, drawings) shown apart.
+  kind      String    @default("OPERATING")
+  sortOrder Int       @default(0)
+  isSystem  Boolean   @default(false)
+  color     String?
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  expenses          Expense[]
+  recurringExpenses RecurringExpense[]
+
+  @@unique([storeId, name])
+  @@index([storeId, sortOrder])
+}
+
+model Expense {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  date        DateTime
+  name        String
+  categoryId  String?
+  category    ExpenseCategory? @relation(fields: [categoryId], references: [id])
+  supplierId  String?
+  supplier    Supplier?        @relation(fields: [supplierId], references: [id])
+
+  amountMinor     BigInt
+  currency        String @default("PKR")
+  fxRateE8        BigInt @default(100000000)
+  baseAmountMinor BigInt
+
+  paymentMethod String? // CASH | BANK | CARD | JAZZCASH | EASYPAISA | OTHER
+  vendorName    String?
+  description   String?
+  notes         String?
+
+  receiptPath     String?
+  receiptFileName String?
+
+  recurringExpenseId String?
+  recurringExpense   RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
+
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([storeId, date])
+  @@index([storeId, categoryId])
+  @@index([storeId, deletedAt])
+}
+
+model RecurringExpense {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name       String
+  categoryId String?
+  category   ExpenseCategory? @relation(fields: [categoryId], references: [id])
+
+  amountMinor     BigInt
+  currency        String @default("PKR")
+  fxRateE8        BigInt @default(100000000)
+  baseAmountMinor BigInt
+
+  frequency     String // WEEKLY | MONTHLY | QUARTERLY | YEARLY
+  startDate     DateTime
+  endDate       DateTime?
+  dayOfMonth    Int? // for MONTHLY/QUARTERLY/YEARLY
+  paymentMethod String?
+  vendorName    String?
+  notes         String?
+
+  isActive          Boolean   @default(true)
+  lastGeneratedDate DateTime?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  generated Expense[]
+
+  @@index([storeId, isActive])
+}
+
+// -----------------------------------------------------------------------------
+// Sales / revenue
+// -----------------------------------------------------------------------------
+
+model Sale {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  date          DateTime
+  orderId       String
+  customerName  String?
+  channel       String  @default("Shopify") // Shopify | Instagram | WhatsApp | Wholesale | Other
+
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  productName String?
+  sku         String?
+  quantity    Int      @default(1)
+
+  // All amounts positive as entered; netRevenueMinor is the signed result.
+  grossAmountMinor     BigInt @default(0)
+  discountMinor        BigInt @default(0)
+  refundMinor          BigInt @default(0)
+  shippingRevenueMinor BigInt @default(0)
+  paymentFeeMinor      BigInt @default(0)
+  netRevenueMinor      BigInt @default(0)
+
+  currency            String @default("PKR")
+  fxRateE8            BigInt @default(100000000)
+  baseNetRevenueMinor BigInt @default(0)
+
+  // Shopify lifecycle. Revenue is only recognised for DELIVERED/PAID orders.
+  financialStatus   String? // PAID | PENDING | REFUNDED | PARTIALLY_REFUNDED
+  fulfillmentStatus String? // FULFILLED | UNFULFILLED | RETURNED | CANCELLED | IN_TRANSIT
+  isCancelled       Boolean @default(false)
+
+  notes String?
+
+  shopifyOrderGid String?
+  importBatchId   String?
+  importBatch     ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  /// The operational counterpart, when this sale is a shippable order.
+  order Order?
+
+  @@index([storeId, date])
+  @@index([storeId, orderId])
+  @@index([storeId, deletedAt])
+  @@index([storeId, channel])
+}
+
+// -----------------------------------------------------------------------------
+// Cost of goods sold
+// -----------------------------------------------------------------------------
+
+model CogsEntry {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  date        DateTime
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id])
+  productName String
+  sku         String?
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+
+  quantity       Int
+  unitCostMinor  BigInt
+  totalCostMinor BigInt // always quantity * unitCostMinor, computed server-side
+
+  currency            String @default("PKR")
+  fxRateE8            BigInt @default(100000000)
+  baseTotalCostMinor  BigInt
+
+  reference String? // purchase order / invoice ref
+  notes     String?
+
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([storeId, date])
+  @@index([storeId, sku])
+  @@index([storeId, deletedAt])
+}
+
+// -----------------------------------------------------------------------------
+// Advertising
+// -----------------------------------------------------------------------------
+
+model AdSpend {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  date         DateTime
+  platform     String // META | GOOGLE | TIKTOK | AMAZON | SNAPCHAT | OTHER
+  campaignName String?
+  campaignId   String?
+
+  amountMinor     BigInt
+  currency        String @default("PKR")
+  fxRateE8        BigInt @default(100000000)
+  baseAmountMinor BigInt
+
+  impressions Int?
+  clicks      Int?
+  conversions Int?
+
+  notes String?
+
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([storeId, date])
+  @@index([storeId, platform])
+  @@index([storeId, deletedAt])
+}
+
+// -----------------------------------------------------------------------------
+// Catalogue
+// -----------------------------------------------------------------------------
+
+model Product {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name     String
+  sku      String?
+  category String?
+
+  sellingPriceMinor BigInt @default(0)
+  unitCostMinor     BigInt @default(0)
+  quantityOnHand    Int    @default(0)
+  reorderLevel      Int?
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  notes String?
+
+  shopifyProductGid String?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  sales       Sale[]
+  cogsEntries CogsEntry[]
+  orderItems  OrderItem[]
+
+  @@index([storeId, deletedAt])
+  @@index([storeId, sku])
+}
+
+model Supplier {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name        String
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  country     String?
+  notes       String?
+
+  openingBalanceMinor BigInt @default(0)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  products    Product[]
+  cogsEntries CogsEntry[]
+  expenses    Expense[]
+  payments    SupplierPayment[]
+
+  @@index([storeId, deletedAt])
+}
+
+model SupplierPayment {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  date            DateTime
+  amountMinor     BigInt
+  currency        String   @default("PKR")
+  fxRateE8        BigInt   @default(100000000)
+  baseAmountMinor BigInt
+  method          String?
+  reference       String?
+  notes           String?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([supplierId, date])
+}
+
+// -----------------------------------------------------------------------------
+// Cash
+// -----------------------------------------------------------------------------
+
+model CashAccount {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name                String
+  type                String @default("BANK") // BANK | CASH | WALLET
+  currency            String @default("PKR")
+  openingBalanceMinor BigInt @default(0)
+  openingDate         DateTime
+  isDefault           Boolean @default(false)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  entries CashEntry[]
+
+  @@index([storeId, deletedAt])
+}
+
+// Manual cash movements that are not already implied by a sale, expense,
+// COGS purchase or ad spend - owner drawings, capital injections, loans,
+// other income. The cash-flow statement combines these with the derived rows.
+model CashEntry {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  accountId String?
+  account   CashAccount? @relation(fields: [accountId], references: [id])
+
+  date      DateTime
+  direction String // IN | OUT
+  category  String // OTHER_INCOME | CAPITAL | LOAN | DRAWINGS | TAX | TRANSFER | OTHER
+  name      String
+
+  amountMinor     BigInt
+  currency        String @default("PKR")
+  fxRateE8        BigInt @default(100000000)
+  baseAmountMinor BigInt
+
+  notes String?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([storeId, date])
+  @@index([storeId, deletedAt])
+}
+
+// -----------------------------------------------------------------------------
+// Imports
+// -----------------------------------------------------------------------------
+
+model ImportBatch {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  fileName     String
+  fileSize     Int
+  fileHash     String // md5 - used to spot re-uploads of the same report
+  storedPath   String? // the original file is kept for audit
+  sheetName    String?
+  targetEntity String // EXPENSE | SALE | COGS | AD_SPEND | PRODUCT | SUPPLIER | CASH
+
+  columnMapping String // JSON: { appField: sourceColumn }
+  status        String @default("PENDING") // PENDING | COMPLETED | FAILED | ROLLED_BACK
+
+  totalRows    Int @default(0)
+  importedRows Int @default(0)
+  skippedRows  Int @default(0)
+  errorRows    Int @default(0)
+
+  errorMessage String?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  records     ImportRecord[]
+  expenses    Expense[]
+  sales       Sale[]
+  cogsEntries CogsEntry[]
+  adSpends    AdSpend[]
+
+  @@index([storeId, createdAt])
+  @@index([storeId, fileHash])
+}
+
+model ImportRecord {
+  id      String      @id @default(cuid())
+  batchId String
+  batch   ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  rowIndex Int
+  rawData  String // JSON of the source row
+  status   String // IMPORTED | SKIPPED_DUPLICATE | ERROR
+  message  String?
+  entityId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([batchId, status])
+}
+
+// -----------------------------------------------------------------------------
+// Currency
+// -----------------------------------------------------------------------------
+
+model ExchangeRate {
+  id       String @id @default(cuid())
+  storeId  String
+  store    Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  currency String // rate is FROM this currency TO the store base currency
+  rateE8   BigInt // scaled by 1e8
+  date     DateTime
+
+  createdAt DateTime @default(now())
+
+  @@unique([storeId, currency, date])
+  @@index([storeId, currency])
+}
+
+// -----------------------------------------------------------------------------
+// Audit
+// -----------------------------------------------------------------------------
+
+// =============================================================================
+// ORDER TRACKING & DELIVERY MANAGEMENT
+//
+// `Sale` above stays the finance record — one revenue line, from any channel.
+// `Order` here is the *operational* record: an order that has to be picked,
+// shipped and delivered. They are linked but kept apart because they answer
+// different questions and have different lifetimes: a Sale is closed once the
+// money is recognised, an Order stays open until the parcel stops moving.
+//
+// A shipment is its own entity rather than columns on Order, so one order can
+// carry several consignments (a split delivery, or a replacement sent after a
+// failed attempt) without any schema change.
+// =============================================================================
+
+model Courier {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name String
+  code String // LEOPARDS | TCS | MANUAL | ...
+
+  isActive  Boolean @default(true)
+  isDefault Boolean @default(false)
+
+  // Credentials are per-courier so a store can hold more than one account.
+  // Read server-side only; env vars seed them and always win when set.
+  apiKey       String?
+  apiPassword  String?
+  apiEnvironment String @default("production") // production | staging
+  originCityId String?
+  returnAddress String?
+
+  trackingUrlTemplate String? // e.g. https://www.leopardscourier.com/tracking?cn={cn}
+
+  lastSyncAt      DateTime?
+  lastSyncOkAt    DateTime?
+  lastSyncError   String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  shipments       Shipment[]
+  statusMappings  CourierStatusMapping[]
+  syncLogs        SyncLog[]
+
+  @@unique([storeId, code])
+  @@index([storeId, deletedAt])
+}
+
+/// Courier wording -> our internal lifecycle. Configurable, because couriers
+/// change their phrasing without warning and we must not lose the original.
+model CourierStatusMapping {
+  id        String  @id @default(cuid())
+  courierId String
+  courier   Courier @relation(fields: [courierId], references: [id], onDelete: Cascade)
+
+  /// Lower-cased courier status text, used as the match key.
+  courierStatus String
+  internalStatus String
+
+  /// True when this status means the order needs a human to look at it.
+  isIssue     Boolean @default(false)
+  /// True when this status represents a delivery attempt having taken place.
+  isAttempt   Boolean @default(false)
+  /// Ends the shipment's life: delivered, returned, cancelled.
+  isTerminal  Boolean @default(false)
+
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([courierId, courierStatus])
+  @@index([courierId])
+}
+
+model Order {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  /// The finance-side row for the same order, when there is one.
+  saleId String? @unique
+  sale   Sale?   @relation(fields: [saleId], references: [id])
+
+  // --- Shopify identity -----------------------------------------------------
+  shopifyOrderId  String? // numeric legacy id
+  shopifyOrderGid String? // gid://shopify/Order/123
+  orderNumber     String // #1042 — what the customer and courier both quote
+
+  placedAt  DateTime
+  closedAt  DateTime?
+  cancelledAt DateTime?
+
+  // --- Customer -------------------------------------------------------------
+  customerName  String?
+  customerPhone String?
+  customerEmail String?
+
+  address1   String?
+  address2   String?
+  city       String?
+  province   String?
+  postalCode String?
+  country    String?
+
+  // --- Money (minor units, same convention as the rest of the app) ----------
+  subtotalMinor BigInt @default(0)
+  discountMinor BigInt @default(0)
+  shippingMinor BigInt @default(0)
+  totalMinor    BigInt @default(0)
+  currency      String @default("PKR")
+
+  paymentMethod String? // COD | PREPAID | CARD | BANK
+  paymentStatus String? // PAID | PENDING | PARTIALLY_REFUNDED | REFUNDED
+
+  // --- Status ---------------------------------------------------------------
+  /// Our lifecycle. See ORDER_STATUSES in src/lib/orders/statuses.ts.
+  status String @default("NEW")
+  /// Set when a courier status maps to something needing attention.
+  hasIssue    Boolean @default(false)
+  issueReason String?
+
+  shopifyFulfillmentStatus String?
+  shopifyFinancialStatus   String?
+  tags                     String? // comma separated, as Shopify gives them
+  notes                    String?
+
+  /// Denormalised for the list view, which must stay fast at thousands of rows.
+  currentStatusAt   DateTime?
+  currentLocation   String?
+  lastTrackingAt    DateTime?
+  deliveryAttempts  Int      @default(0)
+  expectedDeliveryAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  items     OrderItem[]
+  shipments Shipment[]
+  orderNotes OrderNote[]
+
+  @@unique([storeId, orderNumber])
+  @@index([storeId, status])
+  @@index([storeId, placedAt])
+  @@index([storeId, hasIssue])
+  @@index([storeId, deletedAt])
+  @@index([shopifyOrderGid])
+  @@index([customerPhone])
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  title     String
+  variant   String?
+  sku       String?
+  quantity  Int    @default(1)
+  unitPriceMinor BigInt @default(0)
+  totalMinor     BigInt @default(0)
+
+  shopifyLineItemId String?
+
+  @@index([orderId])
+  @@index([sku])
+}
+
+model Shipment {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  courierId String?
+  courier   Courier? @relation(fields: [courierId], references: [id])
+
+  /// CN number from the courier. Unique per store so one parcel is one row.
+  trackingNumber String?
+  /// The courier's own reference for our order, echoed back on booking.
+  courierOrderId String?
+
+  status         String  @default("SHIPMENT_CREATED")
+  courierStatus  String?
+  currentLocation String?
+
+  bookedAt    DateTime?
+  pickedUpAt  DateTime?
+  deliveredAt DateTime?
+  returnedAt  DateTime?
+  cancelledAt DateTime?
+
+  expectedDeliveryAt DateTime?
+  lastTrackingAt     DateTime?
+
+  weightGrams   Int?
+  pieces        Int     @default(1)
+  codAmountMinor BigInt @default(0)
+
+  /// Derived from tracking events, never typed by hand.
+  deliveryAttempts Int @default(0)
+
+  /// Raw booking response, kept for debugging a rejected shipment.
+  bookingResponse String?
+  labelUrl        String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  events   TrackingEvent[]
+  attempts DeliveryAttempt[]
+
+  @@unique([storeId, trackingNumber])
+  @@index([storeId, status])
+  @@index([orderId])
+  @@index([storeId, lastTrackingAt])
+}
+
+/// Append-only. A courier event is never updated or deleted once recorded —
+/// `dedupeKey` is what stops a re-sync writing the same event twice.
+model TrackingEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  occurredAt DateTime
+  /// SHOPIFY | LEOPARDS | MANUAL | SYSTEM
+  source     String
+
+  courierStatus  String?
+  internalStatus String
+  location       String?
+  description    String?
+  notes          String?
+
+  /// Decided by the courier's status mapping when the event was recorded, and
+  /// stored so the attempt count is derived from what the mapping said at the
+  /// time rather than re-evaluated against a mapping that may since have
+  /// changed.
+  countsAsAttempt Boolean @default(false)
+
+  /// Set only for a manual entry, so an override is always attributable.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  /// sha1 of shipment + courier status + timestamp + location.
+  dedupeKey String
+
+  rawPayload String?
+  createdAt  DateTime @default(now())
+
+  @@unique([shipmentId, dedupeKey])
+  @@index([shipmentId, occurredAt])
+  @@index([internalStatus])
+}
+
+model DeliveryAttempt {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  attemptNumber Int
+  attemptedAt   DateTime
+  /// FAILED | DELIVERED
+  outcome       String
+  reason        String?
+  courierRemarks String?
+  location      String?
+  nextAction    String?
+
+  /// The event this attempt was derived from, so it is never double-counted.
+  sourceEventId String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@unique([shipmentId, attemptNumber])
+  @@index([shipmentId])
+}
+
+model OrderNote {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  body String
+  /// NOTE | ISSUE | RESOLUTION
+  kind String @default("NOTE")
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model SyncLog {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  courierId String?
+  courier   Courier? @relation(fields: [courierId], references: [id])
+
+  /// SHOPIFY_ORDERS | LEOPARDS_TRACKING | LEOPARDS_BOOKING | SHOPIFY_WEBHOOK
+  kind    String
+  /// RUNNING | SUCCESS | PARTIAL | FAILED
+  status  String @default("RUNNING")
+  trigger String @default("MANUAL") // MANUAL | CRON | WEBHOOK
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+
+  itemsChecked Int @default(0)
+  itemsCreated Int @default(0)
+  itemsUpdated Int @default(0)
+  itemsFailed  Int @default(0)
+
+  message String?
+  /// Trimmed API response, for working out why a sync went wrong.
+  detail  String?
+
+  @@index([storeId, kind, startedAt])
+  @@index([storeId, status])
+}
+
+model AuditLog {
+  id      String  @id @default(cuid())
+  storeId String
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId  String?
+  user    User?   @relation(fields: [userId], references: [id])
+
+  entity   String
+  entityId String
+  action   String // CREATE | UPDATE | DELETE | RESTORE | IMPORT | EXPORT
+  summary  String?
+  before   String? // JSON snapshot
+  after    String? // JSON snapshot
+
+  createdAt DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([entity, entityId])
+}
