@@ -418,27 +418,20 @@ signature and a session-bound nonce before a token is requested.
 
 ## Deploying to Railway
 
-The repo ships a `railway.json`, so Railway knows how to build, start and health-check
-the app. The database stays on SQLite, kept on a Railway **volume** together with
-uploaded receipts and import files.
+The repository root holds a `Dockerfile` and `railway.json`, so Railway builds and runs
+the app with no build settings to fill in. The database stays on SQLite, kept on a
+Railway **volume** together with uploaded receipts and import files.
 
-1. **New project → Deploy from GitHub repo**, and pick this repository.
-2. In the service's **Settings → Source**, set **Root Directory** to `/Dekorify App`
-   (the app lives in that folder, not at the top of the repo).
-3. **Add a volume** to the service (right-click the service → *Attach volume*) and
-   mount it at `/data`.
-4. Under **Variables**, add:
-
-   | Variable | Value |
-   |---|---|
-   | `DATABASE_URL` | `file:/data/dekorify.db` |
-   | `STORAGE_DIR` | `/data/storage` |
-   | `CRON_SECRET` | another random string, if you use the sync endpoints |
-
-   Add the Shopify and Leopards variables from `.env.example` when you are ready to
-   connect them.
-5. **Settings → Networking → Generate Domain** to get a public `*.up.railway.app`
-   address, then deploy.
+1. **New project → Deploy from GitHub repo**, and pick this repository. Leave Root
+   Directory empty.
+2. **Add a volume** to the service (right-click the service → *Attach volume*) and mount
+   it at `/data`. Without it, your data is wiped on every redeploy.
+3. **Settings → Networking → Generate Domain** to get a public `*.up.railway.app`
+   address.
+4. Optional: under **Variables**, add `CRON_SECRET` and the Shopify and Leopards values
+   from `.env.example` when you are ready to connect them. `DATABASE_URL` and
+   `STORAGE_DIR` already default to the volume (`file:/data/dekorify.db` and
+   `/data/storage`).
 
 On every start the app runs `prisma db push` to bring the database schema up to date,
 then serves on Railway's `$PORT`. Railway waits for `/api/health` to answer (it checks
