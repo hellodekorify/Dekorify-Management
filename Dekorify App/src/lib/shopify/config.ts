@@ -48,6 +48,17 @@ export function shopifyApiVersion(): string {
   return process.env.SHOPIFY_API_VERSION?.trim() || DEFAULT_SHOPIFY_API_VERSION;
 }
 
+/**
+ * The public address Shopify redirects to and posts webhooks at. On Railway the
+ * service's generated domain is used when SHOPIFY_APP_URL is not set.
+ */
+function appUrl(): string {
+  const explicit = process.env.SHOPIFY_APP_URL?.trim();
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  const url = explicit || (railway ? `https://${railway}` : "http://localhost:3000");
+  return url.replace(/\/$/, "");
+}
+
 export function readShopifyConfig(): ShopifyConfig | null {
   const apiKey = process.env.SHOPIFY_API_KEY?.trim();
   const apiSecret = process.env.SHOPIFY_API_SECRET?.trim();
@@ -58,7 +69,7 @@ export function readShopifyConfig(): ShopifyConfig | null {
     apiKey,
     apiSecret,
     scopes: process.env.SHOPIFY_SCOPES?.trim() || REQUIRED_ADMIN_SCOPES.join(","),
-    appUrl: (process.env.SHOPIFY_APP_URL?.trim() || "http://localhost:3000").replace(/\/$/, ""),
+    appUrl: appUrl(),
     apiVersion: shopifyApiVersion(),
   };
 }

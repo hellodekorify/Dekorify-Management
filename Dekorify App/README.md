@@ -416,6 +416,44 @@ signature and a session-bound nonce before a token is requested.
 
 ---
 
+## Deploying to Railway
+
+The repository root holds a `Dockerfile` and `railway.json`, so Railway builds and runs
+the app with no build settings to fill in. The database stays on SQLite, kept on a
+Railway **volume** together with uploaded receipts and import files.
+
+1. **New project → Deploy from GitHub repo**, and pick this repository. Leave Root
+   Directory empty.
+2. **Add a volume** to the service (right-click the service → *Attach volume*) and mount
+   it at `/data`. Without it, your data is wiped on every redeploy.
+3. **Settings → Networking → Generate Domain** to get a public `*.up.railway.app`
+   address.
+4. Optional: under **Variables**, add `CRON_SECRET` and the Shopify and Leopards values
+   from `.env.example` when you are ready to connect them. `DATABASE_URL` and
+   `STORAGE_DIR` already default to the volume (`file:/data/dekorify.db` and
+   `/data/storage`).
+
+On every start the app runs `prisma db push` to bring the database schema up to date,
+then serves on Railway's `$PORT`. Railway waits for `/api/health` to answer (it checks
+that the database responds) before switching traffic to the new deploy.
+
+The first deploy starts with an empty database, so go to `/signup` and create your
+account.
+
+**Shopify on Railway.** `SHOPIFY_APP_URL` falls back to the Railway domain, so you can
+leave it unset. Register `https://<your-domain>/api/shopify/callback` as the redirect URL
+in your Shopify app. Webhooks work without a tunnel because the address is public.
+
+**Scheduled tracking sync.** Add a Railway cron service, or use any external scheduler,
+to call `POST https://<your-domain>/api/tracking/sync` with
+`Authorization: Bearer $CRON_SECRET` every 10–15 minutes.
+
+**Keep it to one replica.** SQLite on a volume supports a single instance, which is what
+`railway.json` sets. If you ever need more, switch to PostgreSQL (see below) and add
+Railway's Postgres plugin. Note that on PostgreSQL, search becomes case-sensitive.
+
+---
+
 ## Moving to PostgreSQL
 
 Development uses SQLite so the app runs with no database to install. Switching is two
