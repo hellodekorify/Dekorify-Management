@@ -440,9 +440,22 @@ that the database responds) before switching traffic to the new deploy.
 The first deploy starts with an empty database, so go to `/signup` and create your
 account.
 
-**Shopify on Railway.** `SHOPIFY_APP_URL` falls back to the Railway domain, so you can
-leave it unset. Register `https://<your-domain>/api/shopify/callback` as the redirect URL
-in your Shopify app. Webhooks work without a tunnel because the address is public.
+**Keep it private.** A public URL must not be left open. Set `REQUIRE_LOGIN=true` in
+Railway Variables to force the sign-in page. When it is unset the app opens with no
+authentication (every visitor is treated as the workspace owner), which is only safe on a
+private deployment.
+
+**Shopify on Railway — two ways to connect.**
+
+- *Auto-connect from the environment (no in-app step).* Create a custom-app Admin API
+  access token (`shpat_…`) in Shopify, then set `SHOPIFY_STORE_DOMAIN` and
+  `SHOPIFY_ACCESS_TOKEN` in Railway Variables. The app validates the token on first use and
+  connects the store itself — no "Connect" click, no secret typed into the browser. Then
+  run a sync (Settings → Shopify → Sync now, or the scheduled sync below) to pull data in.
+- *OAuth from the app.* `SHOPIFY_APP_URL` falls back to the Railway domain, so you can
+  leave it unset. Register `https://<your-domain>/api/shopify/callback` as the redirect URL
+  in your Shopify app, set `SHOPIFY_API_KEY`/`SHOPIFY_API_SECRET`, and click Connect in
+  Settings → Shopify. Webhooks work without a tunnel because the address is public.
 
 **Scheduled tracking sync.** Add a Railway cron service, or use any external scheduler,
 to call `POST https://<your-domain>/api/tracking/sync` with

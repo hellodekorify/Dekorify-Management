@@ -7,6 +7,7 @@ import {
   readShopifyConfig,
   REQUIRED_ADMIN_SCOPES,
 } from "@/lib/shopify/config";
+import { ensureShopifyFromEnv } from "@/lib/shopify/bootstrap";
 import { formatDate } from "@/lib/dates";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,10 @@ export default async function ShopifySettingsPage({
 }) {
   const { store } = await requireContext();
   const params = await searchParams;
+
+  // Self-connect from env vars (host-configured deployments) before reading, so
+  // the page reflects an environment connection without a sync having run yet.
+  await ensureShopifyFromEnv(store.id);
 
   const configured = isShopifyConfigured();
   const config = readShopifyConfig();
