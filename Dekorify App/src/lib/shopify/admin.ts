@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { shopifyGraphQL } from "./client";
 import { ShopifyApiError, notConnected } from "./errors";
+import { ensureShopifyFromEnv } from "./bootstrap";
 
 /**
  * The reusable layer every Shopify endpoint is built on.
@@ -24,6 +25,11 @@ export interface ShopifyConnection {
  * client component.
  */
 export async function getShopifyConnection(storeId: string): Promise<ShopifyConnection> {
+  // Self-connect from SHOPIFY_STORE_DOMAIN / SHOPIFY_ACCESS_TOKEN when present,
+  // so a host-configured deployment needs no in-app connect step. No-op once
+  // connected, or when the env vars are absent.
+  await ensureShopifyFromEnv(storeId);
+
   const store = await prisma.store.findUnique({
     where: { id: storeId },
     select: { shopifyDomain: true, shopifyAccessToken: true },

@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { ensureShopifyFromEnv } from "./bootstrap";
 import { parseMoney, FX_IDENTITY } from "../money";
 import { upsertOrderFromShopify } from "../orders/from-shopify";
 import {
@@ -33,6 +34,9 @@ export async function syncShopifyStore(
   storeId: string,
   options: { since?: Date; includeProducts?: boolean; includeOrders?: boolean } = {},
 ): Promise<SyncResult> {
+  // Pick up a host-configured (env var) connection before checking.
+  await ensureShopifyFromEnv(storeId);
+
   const store = await prisma.store.findUniqueOrThrow({ where: { id: storeId } });
 
   if (!store.shopifyDomain || !store.shopifyAccessToken) {
