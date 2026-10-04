@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { parseMoney } from "@/lib/money";
 import { firstErrors } from "@/lib/utils";
@@ -70,6 +70,7 @@ function readProduct(formData: FormData) {
 }
 
 export async function createProductAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Products", "Create");
   const { user, store } = await requireContext();
 
   const result = readProduct(formData);
@@ -101,6 +102,7 @@ export async function createProductAction(_prev: FormState, formData: FormData):
 }
 
 export async function updateProductAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Products", "Edit");
   const { user, store } = await requireContext();
   const id = String(formData.get("id") ?? "");
 
@@ -137,6 +139,7 @@ export async function updateProductAction(_prev: FormState, formData: FormData):
 }
 
 export async function deleteProductAction(id: string): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Products", "Delete");
   const { user, store } = await requireContext();
 
   const existing = await prisma.product.findFirst({ where: { id, storeId: store.id } });
@@ -217,6 +220,7 @@ export async function createSupplierAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Products", "Create");
   const { store } = await requireContext();
 
   const result = readSupplier(formData);
@@ -237,6 +241,7 @@ export async function updateSupplierAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Products", "Edit");
   const { store } = await requireContext();
   const id = String(formData.get("id") ?? "");
 
@@ -258,6 +263,7 @@ export async function updateSupplierAction(
 }
 
 export async function deleteSupplierAction(id: string): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Products", "Delete");
   const { store } = await requireContext();
 
   const existing = await prisma.supplier.findFirst({ where: { id, storeId: store.id } });
@@ -273,6 +279,7 @@ export async function recordSupplierPaymentAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Products", "Edit");
   const { store } = await requireContext();
   const supplierId = String(formData.get("supplierId") ?? "");
 

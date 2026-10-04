@@ -111,6 +111,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
           accountType: true,
           status: true,
           mustChangePassword: true,
+          expiresAt: true,
           roleId: true,
           permissionOverrides: true,
           role: { select: { name: true, permissions: true } },
@@ -131,8 +132,10 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const status = (u.status as AccountStatus) ?? "ACTIVE";
 
   // A session that outlives the account being suspended/deactivated must not
-  // keep working: deny immediately.
+  // keep working: deny immediately. An account past its expiry is likewise
+  // treated as having no valid session.
   if (status === "SUSPENDED" || status === "DEACTIVATED") return null;
+  if (u.expiresAt && u.expiresAt.getTime() < Date.now()) return null;
 
   return {
     id: u.id,
@@ -176,6 +179,9 @@ export async function requirePermission(module: Module, action: Action): Promise
 export async function assertPermission(module: Module, action: Action): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) throw new PermissionError(module, action);
+  // A user who still owes a password change must not be able to act via a
+  // direct call that bypasses the /change-password redirect.
+  if (user.mustChangePassword) throw new PermissionError(module, action);
   if (!can(user.authz, module, action)) throw new PermissionError(module, action);
   return user;
 }
@@ -194,15 +200,23 @@ export function superAdminEmail(): string | null {
   return raw && raw.length > 0 ? raw : null;
 }
 
+// Once an active Super Admin exists, setup is permanently done, so cache it to
+// keep the per-request check off the hot path. Only the positive result is
+// cached (a reset would restart the process anyway).
+let setupComplete = false;
+
 /** True when SUPER_ADMIN_EMAIL is set but that account has not been activated. */
 export async function needsSuperAdminSetup(): Promise<boolean> {
   const email = superAdminEmail();
   if (!email) return false;
+  if (setupComplete) return false;
   const existing = await prisma.user.findUnique({
     where: { email },
     select: { accountType: true, status: true },
   });
-  return !(existing && existing.accountType === "SUPER_ADMIN" && existing.status === "ACTIVE");
+  const done = Boolean(existing && existing.accountType === "SUPER_ADMIN" && existing.status === "ACTIVE");
+  if (done) setupComplete = true;
+  return !done;
 }
 
 // ---------------------------------------------------------------------------

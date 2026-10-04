@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { makeLinkBuilders, parseListParams } from "@/lib/list-params";
 import { formatMoney, formatPercent } from "@/lib/currency";
 import { percentOf, sumMoney, toDecimalString } from "@/lib/money";
@@ -36,6 +36,7 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  await requirePermission("Products", "View");
   const { store } = await requireContext();
   const raw = await searchParams;
   const params = parseListParams(raw, {

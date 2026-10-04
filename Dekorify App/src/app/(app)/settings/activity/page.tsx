@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { History } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ export default async function ActivityPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requirePermission("Audit Logs", "View");
   const { store } = await requireContext();
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);

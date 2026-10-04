@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, FileBarChart } from "lucide-react";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { REPORTS } from "@/lib/reports";
 import { reportOverview } from "@/lib/reports";
 import { resolveDateRange, type DatePreset } from "@/lib/dates";
@@ -18,6 +18,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
+  await requirePermission("Reports", "View");
   const { store } = await requireContext();
   const params = await searchParams;
 

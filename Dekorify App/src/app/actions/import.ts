@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { recordAudit, safeStringify } from "@/lib/audit";
 import { readStoredFile, storeImportFile } from "@/lib/storage";
 import { parseWorkbook, type ParsedSheet } from "@/lib/import/parse";
@@ -37,6 +37,7 @@ export type UploadResult =
   | { ok: false; message: string };
 
 export async function uploadImportFileAction(formData: FormData): Promise<UploadResult> {
+  await assertPermission("Finance", "Create");
   const { user, store } = await requireContext();
 
   const file = formData.get("file");
@@ -136,6 +137,7 @@ export async function suggestMappingAction(
   sheetName: string,
   target: ImportTarget,
 ): Promise<Record<string, string>> {
+  await assertPermission("Finance", "Create");
   const sheet = await loadSheet(batchId, sheetName);
   return sheet ? autoMap(target, sheet.headers) : {};
 }
@@ -160,6 +162,7 @@ export async function previewImportAction(
   mapping: Record<string, string>,
   skipDuplicates: boolean,
 ): Promise<PreviewResult> {
+  await assertPermission("Finance", "Create");
   const { store } = await requireContext();
 
   const sheet = await loadSheet(batchId, sheetName);
@@ -352,6 +355,7 @@ export async function confirmImportAction(
 // ---------------------------------------------------------------------------
 
 async function loadSheet(batchId: string, sheetName: string): Promise<ParsedSheet | null> {
+  await assertPermission("Finance", "Create");
   const { store } = await requireContext();
 
   const batch = await prisma.importBatch.findFirst({

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { applyFxRate, FX_IDENTITY, parseFxRate, parseMoney } from "@/lib/money";
 import { parseDateInput } from "@/lib/dates";
@@ -27,6 +27,7 @@ export async function saveCashAccountAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Finance", "Edit");
   const { store } = await requireContext();
   const id = String(formData.get("id") ?? "");
 
@@ -73,6 +74,7 @@ export async function saveCashAccountAction(
 export async function deleteCashAccountAction(
   id: string,
 ): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Finance", "Delete");
   const { store } = await requireContext();
 
   const existing = await prisma.cashAccount.findFirst({ where: { id, storeId: store.id } });
@@ -166,6 +168,7 @@ export async function createCashEntryAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Finance", "Create");
   const { user, store } = await requireContext();
 
   const result = await readEntry(formData, store.baseCurrency);
@@ -192,6 +195,7 @@ export async function updateCashEntryAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Finance", "Edit");
   const { store } = await requireContext();
   const id = String(formData.get("id") ?? "");
 
@@ -209,6 +213,7 @@ export async function updateCashEntryAction(
 }
 
 export async function deleteCashEntryAction(id: string): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Finance", "Delete");
   const { user, store } = await requireContext();
 
   const existing = await prisma.cashEntry.findFirst({ where: { id, storeId: store.id } });

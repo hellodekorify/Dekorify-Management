@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentStore, getCurrentUser } from "@/lib/auth";
+import { can } from "@/lib/rbac";
 import { contentTypeFor, readStoredFile } from "@/lib/storage";
 
 /**
@@ -17,6 +18,10 @@ export async function GET(
 
   const store = await getCurrentStore(user.id);
   if (!store) return new NextResponse("No store selected", { status: 403 });
+
+  if (!can(user.authz, "Finance", "View")) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
 
   const { expenseId } = await params;
 

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { applyFxRate, FX_IDENTITY, multiplyByQuantity, parseFxRate, parseMoney } from "@/lib/money";
 import { parseDateInput } from "@/lib/dates";
@@ -93,6 +93,7 @@ async function readInput(formData: FormData, baseCurrency: string) {
 }
 
 export async function createCogsAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Finance", "Create");
   const { user, store } = await requireContext();
 
   const result = await readInput(formData, store.baseCurrency);
@@ -118,6 +119,7 @@ export async function createCogsAction(_prev: FormState, formData: FormData): Pr
 }
 
 export async function updateCogsAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Finance", "Edit");
   const { user, store } = await requireContext();
   const id = String(formData.get("id") ?? "");
 
@@ -146,6 +148,7 @@ export async function updateCogsAction(_prev: FormState, formData: FormData): Pr
 }
 
 export async function deleteCogsAction(id: string): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Finance", "Delete");
   const { user, store } = await requireContext();
 
   const existing = await prisma.cogsEntry.findFirst({ where: { id, storeId: store.id } });

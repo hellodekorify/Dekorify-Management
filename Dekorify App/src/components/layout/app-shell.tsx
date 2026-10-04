@@ -19,15 +19,25 @@ export function AppShell({
   user,
   stores,
   activeStoreId,
+  allowedHrefs,
   children,
 }: {
   user: { name: string; email: string };
   stores: ShellStore[];
   activeStoreId: string;
+  allowedHrefs?: string[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Hide nav entries the user has no permission for (cosmetic; the server enforces).
+  const allowed = allowedHrefs ? new Set(allowedHrefs) : null;
+  const navGroups = allowed
+    ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => allowed.has(i.href)) })).filter(
+        (g) => g.items.length > 0,
+      )
+    : NAV_GROUPS;
 
   // Close the drawer whenever navigation happens, otherwise it covers the page.
   useEffect(() => {
@@ -84,7 +94,7 @@ export function AppShell({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-          {NAV_GROUPS.map((group, index) => (
+          {navGroups.map((group, index) => (
             <div key={group.label ?? `group-${index}`} className={index > 0 ? "mt-5" : ""}>
               {group.label && (
                 <p className="mb-1.5 px-2.5 text-[11px] font-semibold tracking-wider text-sidebar-text-muted uppercase">

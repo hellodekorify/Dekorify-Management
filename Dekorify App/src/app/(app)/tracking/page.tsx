@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Clock, Radar, WifiOff } from "lucide-react";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { LEOPARDS_CODE, resolveCredentials } from "@/lib/leopards/courier";
 import { prisma } from "@/lib/db";
@@ -35,6 +35,7 @@ function one(value: string | string[] | undefined): string | undefined {
 }
 
 export default async function TrackingPage({ searchParams }: PageProps) {
+  await requirePermission("Orders", "View");
   const { store } = await requireContext();
   const params = await searchParams;
 

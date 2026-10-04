@@ -2,25 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Radar, ShoppingBag, Truck, UserCircle, History } from "lucide-react";
+import { Building2, Radar, ShoppingBag, Truck, UserCircle, History, Users, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/settings", label: "Business", icon: Building2 },
   { href: "/settings/profile", label: "Your account", icon: UserCircle },
+  { href: "/settings/users", label: "User Management", icon: Users },
+  { href: "/settings/roles", label: "Roles & Permissions", icon: ShieldCheck },
   { href: "/settings/shopify", label: "Shopify", icon: ShoppingBag },
   { href: "/settings/couriers", label: "Couriers", icon: Truck },
   { href: "/settings/tracking", label: "Tracking", icon: Radar },
   { href: "/settings/activity", label: "Activity log", icon: History },
 ];
 
-export function SettingsNav() {
+export function SettingsNav({ allowed }: { allowed?: string[] }) {
   const pathname = usePathname();
+  const items = allowed ? ITEMS.filter((i) => allowed.includes(i.href)) : ITEMS;
 
   return (
     <nav aria-label="Settings" className="lg:w-56 lg:shrink-0">
       <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-        {ITEMS.map((item) => {
+        {items.map((item) => {
           const active = pathname === item.href;
           return (
             <li key={item.href}>

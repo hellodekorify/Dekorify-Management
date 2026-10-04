@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { syncShopifyProducts, syncShopifyStore } from "@/lib/shopify/sync";
 import { normaliseShopDomain } from "@/lib/shopify/config";
@@ -26,6 +26,7 @@ export async function connectShopifyWithTokenAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Integrations", "Manage");
   const { user, store } = await requireContext();
 
   const parsed = z
@@ -93,6 +94,7 @@ export async function connectShopifyWithTokenAction(
 }
 
 export async function disconnectShopifyAction(): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Integrations", "Manage");
   const { user, store } = await requireContext();
 
   await prisma.store.update({
@@ -126,6 +128,7 @@ export async function syncShopifyAction(includeProducts: boolean): Promise<{
   ok: boolean;
   message: string;
 }> {
+  await assertPermission("Orders", "Edit");
   const { user, store } = await requireContext();
 
   try {
@@ -169,6 +172,7 @@ export async function syncShopifyProductsAction(): Promise<{
   ok: boolean;
   message: string;
 }> {
+  await assertPermission("Products", "Edit");
   const { user, store } = await requireContext();
 
   const connected = await prisma.store.findUnique({

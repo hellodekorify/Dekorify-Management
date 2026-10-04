@@ -58,9 +58,10 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   const valid = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!valid) return invalid;
 
-  // Only ACTIVE accounts may sign in. INVITED/SUSPENDED/DEACTIVATED are refused
-  // with the same generic message.
+  // Only ACTIVE, unexpired accounts may sign in. INVITED/SUSPENDED/DEACTIVATED
+  // and past-expiry accounts are refused with the same generic message.
   if (user.status !== "ACTIVE") return invalid;
+  if (user.expiresAt && user.expiresAt.getTime() < Date.now()) return invalid;
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 

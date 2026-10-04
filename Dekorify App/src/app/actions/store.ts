@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { ACTIVE_STORE_COOKIE, assertStoreAccess, requireContext, requireUser } from "@/lib/auth";
+import { ACTIVE_STORE_COOKIE, assertStoreAccess, requireContext, requireUser, assertPermission } from "@/lib/auth";
 import { createStoreForUser } from "@/lib/store-setup";
 import { firstErrors } from "@/lib/utils";
 import { CURRENCY_CODES } from "@/lib/currency";
@@ -36,6 +36,7 @@ const storeSchema = z.object({
 });
 
 export async function createStoreAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Application Settings", "Manage");
   const user = await requireUser();
 
   const parsed = storeSchema.safeParse({
@@ -63,6 +64,7 @@ export async function createStoreAction(_prev: FormState, formData: FormData): P
 }
 
 export async function updateStoreAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Application Settings", "Manage");
   const { store } = await requireContext();
 
   const parsed = storeSchema.safeParse({

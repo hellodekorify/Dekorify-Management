@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { applyFxRate, FX_IDENTITY, parseFxRate, parseMoney } from "@/lib/money";
 import { parseDateInput } from "@/lib/dates";
@@ -101,6 +101,7 @@ async function readInput(formData: FormData, baseCurrency: string) {
 }
 
 export async function createRecurringAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Finance", "Create");
   const { store } = await requireContext();
 
   const result = await readInput(formData, store.baseCurrency);
@@ -115,6 +116,7 @@ export async function createRecurringAction(_prev: FormState, formData: FormData
 }
 
 export async function updateRecurringAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Finance", "Edit");
   const { store } = await requireContext();
   const id = String(formData.get("id") ?? "");
 
@@ -134,6 +136,7 @@ export async function toggleRecurringAction(
   id: string,
   isActive: boolean,
 ): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Finance", "Edit");
   const { store } = await requireContext();
 
   const existing = await prisma.recurringExpense.findFirst({ where: { id, storeId: store.id } });
@@ -146,6 +149,7 @@ export async function toggleRecurringAction(
 }
 
 export async function deleteRecurringAction(id: string): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Finance", "Delete");
   const { store } = await requireContext();
 
   const existing = await prisma.recurringExpense.findFirst({ where: { id, storeId: store.id } });
@@ -167,6 +171,7 @@ export async function postDueRecurringAction(): Promise<{
   message: string;
   created: number;
 }> {
+  await assertPermission("Finance", "Create");
   const { user, store } = await requireContext();
 
   const schedules = await prisma.recurringExpense.findMany({

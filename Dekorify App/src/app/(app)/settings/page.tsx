@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireContext } from "@/lib/auth";
+import { can } from "@/lib/rbac";
 import { formatDate } from "@/lib/dates";
 import { Card, CardHeader } from "@/components/ui/card";
 import { StoreSettingsForm } from "./settings-forms";
@@ -8,7 +10,9 @@ import { StoreSettingsForm } from "./settings-forms";
 export const metadata: Metadata = { title: "Business settings" };
 
 export default async function BusinessSettingsPage() {
-  const { store } = await requireContext();
+  const { user, store } = await requireContext();
+  // Settings is always reachable; land users without business access on their profile.
+  if (!can(user.authz, "Application Settings", "View")) redirect("/settings/profile");
 
   const [full, counts] = await Promise.all([
     prisma.store.findUniqueOrThrow({ where: { id: store.id } }),

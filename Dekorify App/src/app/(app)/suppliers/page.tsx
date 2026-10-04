@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Truck } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/currency";
 import { formatDate } from "@/lib/dates";
 import { sumMoney, toDecimalString } from "@/lib/money";
@@ -20,6 +20,7 @@ export default async function SuppliersPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
+  await requirePermission("Products", "View");
   const { store } = await requireContext();
   const { q } = await searchParams;
   const search = (q ?? "").trim();

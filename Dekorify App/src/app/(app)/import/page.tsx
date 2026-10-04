@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { FileSpreadsheet } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -24,6 +24,7 @@ function formatBytes(bytes: number): string {
 }
 
 export default async function ImportPage() {
+  await requirePermission("Finance", "View");
   const { store } = await requireContext();
 
   const history = await prisma.importBatch.findMany({

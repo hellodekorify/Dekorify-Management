@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AlertTriangle, ExternalLink, PackageSearch } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { resolveDateRange, formatDate, type DatePreset } from "@/lib/dates";
 import { formatMoney } from "@/lib/currency";
 import { makeLinkBuilders } from "@/lib/list-params";
@@ -59,6 +59,7 @@ export default async function OrdersPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  await requirePermission("Orders", "View");
   const { store } = await requireContext();
   const raw = await searchParams;
 
