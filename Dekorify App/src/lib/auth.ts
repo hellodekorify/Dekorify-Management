@@ -73,7 +73,44 @@ export interface CurrentUser {
   name: string;
 }
 
+/**
+ * Sign-in is switched off unless REQUIRE_LOGIN=true: every visitor is treated
+ * as the workspace owner. Set the variable to bring the login page back.
+ */
+export function isLoginRequired(): boolean {
+  return process.env.REQUIRE_LOGIN?.trim().toLowerCase() === "true";
+}
+
+const OPEN_ACCESS_EMAIL = "owner@dekorify.local";
+
+/** The first account ever created, or a placeholder owner on an empty database. */
+async function openAccessUser(): Promise<CurrentUser> {
+  const first = await prisma.user.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true },
+  });
+  if (first) return first;
+
+  return prisma.user.upsert({
+    where: { email: OPEN_ACCESS_EMAIL },
+    update: {},
+    create: {
+      email: OPEN_ACCESS_EMAIL,
+      name: "Owner",
+      // Unusable password: nobody signs in as this account, it only owns data.
+      passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
+    },
+    select: { id: true, email: true, name: true },
+  });
+}
+
 export async function getCurrentUser(): Promise<CurrentUser | null> {
+  const user = await sessionUser();
+  if (user || isLoginRequired()) return user;
+  return openAccessUser();
+}
+
+async function sessionUser(): Promise<CurrentUser | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
