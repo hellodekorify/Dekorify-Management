@@ -116,7 +116,7 @@ export async function createUserAction(_prev: FormState, formData: FormData): Pr
     if (!role) return { ok: false, errors: { roleId: "That role no longer exists." } };
     rolePerms = parsePermissionMap(role.permissions);
   }
-  const chosen = grantablePermissions(actor.authz, parseMatrix(data.permissions) ?? {});
+  const chosen = grantablePermissions(actor.authz, parseMatrix(data.permissions));
   const overrides = diffPermissions(rolePerms, chosen);
 
   if (data.reportingManagerId) {

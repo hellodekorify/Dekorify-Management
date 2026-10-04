@@ -46,6 +46,12 @@ export interface UserRow {
   accountType: string;
   status: string;
   department: string | null;
+  jobTitle: string | null;
+  phone: string | null;
+  employeeId: string | null;
+  notes: string | null;
+  reportingManagerId: string | null;
+  expiresAt: string | null;
   roleId: string | null;
   roleName: string | null;
   createdByName: string | null;
@@ -465,20 +471,20 @@ function EditDrawer({
         <div className="grid gap-4 sm:grid-cols-2">
           <Input name="name" label="Full name" defaultValue={row.name} required error={state?.errors?.name} />
           <Input name="department" label="Department" defaultValue={row.department ?? ""} />
-          <Input name="jobTitle" label="Job title" defaultValue={""} />
-          <Input name="phone" label="Phone" defaultValue={""} />
-          <Input name="employeeId" label="Employee ID" defaultValue={""} />
+          <Input name="jobTitle" label="Job title" defaultValue={row.jobTitle ?? ""} />
+          <Input name="phone" label="Phone" defaultValue={row.phone ?? ""} />
+          <Input name="employeeId" label="Employee ID" defaultValue={row.employeeId ?? ""} />
           <Field label="Reporting manager">
-            <select name="reportingManagerId" className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-[13.5px]">
+            <select name="reportingManagerId" defaultValue={row.reportingManagerId ?? ""} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-[13.5px]">
               <option value="">None</option>
               {managers.filter((m) => m.id !== row.id).map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
           </Field>
-          <Input name="expiresAt" label="Account expiry" type="date" />
+          <Input name="expiresAt" label="Account expiry" type="date" defaultValue={row.expiresAt ?? ""} />
           <div className="sm:col-span-2">
-            <Input name="notes" label="Internal notes" />
+            <Input name="notes" label="Internal notes" defaultValue={row.notes ?? ""} />
           </div>
         </div>
         <div className="flex justify-end gap-2">
