@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AlertCircle, CheckCircle2, Info, ShoppingBag } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import {
   isShopifyConfigured,
   readShopifyConfig,
@@ -34,6 +34,7 @@ export default async function ShopifySettingsPage({
 }: {
   searchParams: Promise<{ error?: string; connected?: string }>;
 }) {
+  await requirePermission("Integrations", "View");
   const { store } = await requireContext();
   const params = await searchParams;
 

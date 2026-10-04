@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { buildReport, reportById, type ReportId } from "@/lib/reports";
 import { resolveDateRange, type DatePreset } from "@/lib/dates";
 import { AD_PLATFORMS, SALES_CHANNELS } from "@/lib/constants";
@@ -34,6 +34,7 @@ export default async function ReportPage({
   const definition = reportById(reportSlug);
   if (!definition || definition.href) notFound();
 
+  await requirePermission("Reports", "View");
   const { store } = await requireContext();
   const query = await searchParams;
 

@@ -198,6 +198,33 @@ export function grantablePermissions(actor: AuthzUser, requested: PermissionMap)
   return out;
 }
 
+/**
+ * Expresses a chosen permission set relative to a base (role) as add/remove, so
+ * that `effectivePermissions(role + add - remove) === chosen`. Used when a Super
+ * Admin assigns a role then adjusts the matrix before saving.
+ */
+export function diffPermissions(base: PermissionMap, chosen: PermissionMap): PermissionOverrides {
+  const add: PermissionMap = {};
+  const remove: PermissionMap = {};
+  for (const module of MODULE_NAMES) {
+    const b = new Set(base[module] ?? []);
+    const c = new Set(chosen[module] ?? []);
+    const added = [...c].filter((a) => !b.has(a)) as Action[];
+    const removed = [...b].filter((a) => !c.has(a)) as Action[];
+    if (added.length) add[module] = added;
+    if (removed.length) remove[module] = removed;
+  }
+  const out: PermissionOverrides = {};
+  if (Object.keys(add).length) out.add = add;
+  if (Object.keys(remove).length) out.remove = remove;
+  return out;
+}
+
+/** Normalises a raw matrix (module -> actions) to only valid module/action pairs. */
+export function cleanPermissionMap(input: Record<string, string[]>): PermissionMap {
+  return parsePermissionMap(JSON.stringify(input));
+}
+
 export class PermissionError extends Error {
   constructor(public module: Module, public action: Action) {
     super(`Not permitted: ${action} on ${module}.`);

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { buildProfitAndLoss, loadDataset } from "@/lib/finance";
 import { resolveDateRange, type DatePreset } from "@/lib/dates";
 import { formatMoney, formatPercent } from "@/lib/currency";
@@ -18,6 +18,7 @@ export default async function ProfitLossPage({
 }: {
   searchParams: Promise<{ range?: string; from?: string; to?: string; view?: string }>;
 }) {
+  await requirePermission("Finance", "View");
   const { store } = await requireContext();
   const params = await searchParams;
 

@@ -11,7 +11,7 @@ import {
   Truck,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/currency";
 import { formatDate } from "@/lib/dates";
 import { trackingUrlFor } from "@/lib/leopards/courier";
@@ -44,6 +44,7 @@ export default async function OrderDetailPage({
 }: {
   params: Promise<{ orderId: string }>;
 }) {
+  await requirePermission("Orders", "View");
   const { store } = await requireContext();
   const { orderId } = await params;
 

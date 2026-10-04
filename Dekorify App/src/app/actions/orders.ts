@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { applyManualStatus, recomputeShipment, recordTrackingEvents } from "@/lib/orders/tracking";
 import { ORDER_STATUSES } from "@/lib/orders/statuses";
@@ -28,6 +28,7 @@ export async function updateOrderStatusAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Orders", "Edit");
   const { user, store } = await requireContext();
 
   const parsed = z
@@ -76,6 +77,7 @@ export async function updateOrderStatusAction(
 }
 
 export async function addOrderNoteAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Orders", "Edit");
   const { user, store } = await requireContext();
 
   const parsed = z
@@ -133,6 +135,7 @@ export async function setTrackingNumberAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Orders", "Edit");
   const { user, store } = await requireContext();
 
   const parsed = z
@@ -231,6 +234,7 @@ export async function addDeliveryAttemptAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Orders", "Edit");
   const { user, store } = await requireContext();
 
   const parsed = z
@@ -295,6 +299,7 @@ export async function addDeliveryAttemptAction(
 // ---------------------------------------------------------------------------
 
 export async function bookShipmentAction(orderId: string): Promise<ActionResult> {
+  await assertPermission("Orders", "Manage");
   const { user, store } = await requireContext();
 
   const result = await bookShipment(store.id, orderId);
@@ -316,6 +321,7 @@ export async function bookShipmentAction(orderId: string): Promise<ActionResult>
 }
 
 export async function syncTrackingAction(): Promise<ActionResult> {
+  await assertPermission("Orders", "Edit");
   const { store } = await requireContext();
   const result = await syncTracking(store.id, { trigger: "MANUAL" });
 
@@ -326,6 +332,7 @@ export async function syncTrackingAction(): Promise<ActionResult> {
 }
 
 export async function syncOneOrderAction(orderId: string): Promise<ActionResult> {
+  await assertPermission("Orders", "Edit");
   const { store } = await requireContext();
 
   const shipments = await prisma.shipment.findMany({
@@ -354,6 +361,7 @@ export async function saveCourierSettingsAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const parsed = z
@@ -396,6 +404,7 @@ export async function saveCourierSettingsAction(
 }
 
 export async function testCourierConnectionAction(): Promise<ActionResult> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const courier = await prisma.courier.findUnique({
@@ -428,6 +437,7 @@ export async function testCourierConnectionAction(): Promise<ActionResult> {
 }
 
 export async function restoreDefaultMappingsAction(): Promise<ActionResult> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const courierId = await ensureLeopardsCourier(store.id);
@@ -444,6 +454,7 @@ export async function saveStatusMappingAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const parsed = z
@@ -500,6 +511,7 @@ export async function saveStatusMappingAction(
 }
 
 export async function deleteStatusMappingAction(id: string): Promise<ActionResult> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const mapping = await prisma.courierStatusMapping.findFirst({
@@ -518,6 +530,7 @@ export async function saveCityMappingAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const parsed = z

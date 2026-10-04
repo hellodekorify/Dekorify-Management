@@ -11,7 +11,7 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import {
   breakdownAdSpendByPlatform,
   breakdownExpensesByCategory,
@@ -44,6 +44,7 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
+  await requirePermission("Dashboard", "View");
   const { store } = await requireContext();
   const params = await searchParams;
 

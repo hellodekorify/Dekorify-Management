@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { verifyCredentials } from "@/lib/leopards/client";
 import {
   ensureLeopardsCourier,
@@ -33,6 +33,7 @@ export interface TrackingActionResult {
 export async function refreshTrackingAction(
   trackingNumber?: string,
 ): Promise<TrackingActionResult> {
+  await assertPermission("Orders", "Edit");
   const { store } = await requireContext();
 
   try {
@@ -63,6 +64,7 @@ export async function addShipmentsAction(
   _prev: TrackingActionResult | null,
   formData: FormData,
 ): Promise<TrackingActionResult> {
+  await assertPermission("Orders", "Create");
   const { store } = await requireContext();
 
   const parsed = z
@@ -109,6 +111,7 @@ export async function addShipmentsAction(
 }
 
 export async function removeShipmentAction(trackingNumber: string): Promise<TrackingActionResult> {
+  await assertPermission("Orders", "Delete");
   const { store } = await requireContext();
   const removed = await removeShipment(store.id, trackingNumber.toUpperCase());
   revalidatePath("/tracking");
@@ -121,6 +124,7 @@ export async function saveTrackingSettingsAction(
   _prev: TrackingActionResult | null,
   formData: FormData,
 ): Promise<TrackingActionResult> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const parsed = z
@@ -150,6 +154,7 @@ export async function saveCredentialsAction(
   _prev: TrackingActionResult | null,
   formData: FormData,
 ): Promise<TrackingActionResult> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const parsed = z
@@ -188,6 +193,7 @@ export async function saveCredentialsAction(
 
 /** Cheapest authenticated call Leopards offers, used as a connection test. */
 export async function testConnectionAction(): Promise<TrackingActionResult> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
 
   const courier = await prisma.courier.findUnique({
@@ -214,6 +220,7 @@ export async function testConnectionAction(): Promise<TrackingActionResult> {
 }
 
 export async function resetTrackingSettingsAction(): Promise<TrackingActionResult> {
+  await assertPermission("Integrations", "Manage");
   const { store } = await requireContext();
   await writeTrackingSettings(store.id, DEFAULT_TRACKING_SETTINGS);
   revalidatePath("/settings/tracking");

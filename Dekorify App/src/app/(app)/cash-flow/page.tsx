@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { buildCashFlow, buildTimeSeries, loadDataset } from "@/lib/finance";
 import { resolveDateRange, formatDate, toInputDate, type DatePreset } from "@/lib/dates";
 import { formatMoney } from "@/lib/currency";
@@ -34,6 +34,7 @@ export default async function CashFlowPage({
 }: {
   searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
+  await requirePermission("Finance", "View");
   const { store } = await requireContext();
   const params = await searchParams;
 

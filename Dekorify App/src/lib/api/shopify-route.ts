@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentStore, getCurrentUser } from "../auth";
+import { can } from "../rbac";
 import {
   getShopifyConnection,
   type PageInfo,
@@ -63,6 +64,11 @@ export function shopifyRoute<T>(
     const store = await getCurrentStore(user.id);
     if (!store) {
       return failure(403, "NO_STORE", "No store is selected for this account.");
+    }
+
+    // These endpoints read order/shop data — gate behind the Orders module.
+    if (!can(user.authz, "Orders", "View")) {
+      return failure(403, "FORBIDDEN", "You do not have permission to read this data.");
     }
 
     try {

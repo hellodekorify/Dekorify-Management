@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, assertPermission } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { applyFxRate, FX_IDENTITY, parseFxRate, parseMoney } from "@/lib/money";
 import { parseDateInput } from "@/lib/dates";
@@ -88,6 +88,7 @@ async function readExpenseInput(formData: FormData, baseCurrency: string) {
 }
 
 export async function createExpenseAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Finance", "Create");
   const { user, store } = await requireContext();
 
   const result = await readExpenseInput(formData, store.baseCurrency);
@@ -127,6 +128,7 @@ export async function createExpenseAction(_prev: FormState, formData: FormData):
 }
 
 export async function updateExpenseAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Finance", "Edit");
   const { user, store } = await requireContext();
   const id = String(formData.get("id") ?? "");
 
@@ -172,6 +174,7 @@ export async function updateExpenseAction(_prev: FormState, formData: FormData):
 }
 
 export async function deleteExpenseAction(id: string): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Finance", "Delete");
   const { user, store } = await requireContext();
 
   const existing = await prisma.expense.findFirst({ where: { id, storeId: store.id } });
@@ -206,6 +209,7 @@ const categorySchema = z.object({
 });
 
 export async function createCategoryAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Finance", "Create");
   const { store } = await requireContext();
 
   const parsed = categorySchema.safeParse({
@@ -244,6 +248,7 @@ export async function createCategoryAction(_prev: FormState, formData: FormData)
 }
 
 export async function updateCategoryAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await assertPermission("Finance", "Edit");
   const { store } = await requireContext();
   const id = String(formData.get("id") ?? "");
 
@@ -276,6 +281,7 @@ export async function updateCategoryAction(_prev: FormState, formData: FormData)
 export async function deleteCategoryAction(
   id: string,
 ): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Finance", "Delete");
   const { store } = await requireContext();
 
   const existing = await prisma.expenseCategory.findFirst({ where: { id, storeId: store.id } });
@@ -302,6 +308,7 @@ export async function deleteCategoryAction(
 export async function reorderCategoriesAction(
   orderedIds: string[],
 ): Promise<{ ok: boolean; message: string }> {
+  await assertPermission("Finance", "Edit");
   const { store } = await requireContext();
 
   const owned = await prisma.expenseCategory.findMany({

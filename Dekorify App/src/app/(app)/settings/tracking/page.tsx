@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   credentialsFromEnv,
@@ -22,6 +22,7 @@ export const metadata: Metadata = { title: "Tracking settings" };
 export const dynamic = "force-dynamic";
 
 export default async function TrackingSettingsPage() {
+  await requirePermission("Integrations", "View");
   const { store } = await requireContext();
 
   const courier = await prisma.courier.findUnique({

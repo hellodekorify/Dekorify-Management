@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import {
   credentialsConfigured,
@@ -22,6 +22,7 @@ import {
 export const metadata: Metadata = { title: "Couriers" };
 
 export default async function CourierSettingsPage() {
+  await requirePermission("Integrations", "View");
   const { store } = await requireContext();
 
   // Creating on first view means the settings page is never empty.

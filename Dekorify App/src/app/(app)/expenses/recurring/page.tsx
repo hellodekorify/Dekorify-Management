@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowLeft, Repeat } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/currency";
 import { formatDate, toInputDate } from "@/lib/dates";
 import { fxRateToNumber, toDecimalString } from "@/lib/money";
@@ -21,6 +21,7 @@ import {
 export const metadata: Metadata = { title: "Recurring expenses" };
 
 export default async function RecurringExpensesPage() {
+  await requirePermission("Finance", "View");
   const { store } = await requireContext();
 
   const [schedules, categories] = await Promise.all([

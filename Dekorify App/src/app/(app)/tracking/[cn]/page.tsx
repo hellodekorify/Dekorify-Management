@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, MapPin, Package } from "lucide-react";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { getShipment } from "@/lib/leopards/queries";
 import {
@@ -35,6 +35,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function ShipmentPage({ params }: PageProps) {
+  await requirePermission("Orders", "View");
   const { store } = await requireContext();
   const { cn: trackingNumber } = await params;
 

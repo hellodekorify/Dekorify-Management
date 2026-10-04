@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireContext } from "@/lib/auth";
+import { requireContext, requirePermission } from "@/lib/auth";
 import { formatMoney } from "@/lib/currency";
 import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { LinkButton } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import type { CategoryKind } from "@/lib/constants";
 export const metadata: Metadata = { title: "Expense categories" };
 
 export default async function CategoriesPage() {
+  await requirePermission("Finance", "View");
   const { store } = await requireContext();
 
   const [categories, usage] = await Promise.all([
