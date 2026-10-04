@@ -34,8 +34,10 @@ Open <http://localhost:3000> and sign in with:
 | **Email** | `hellodekorify@gmail.com` |
 | **Password** | `Dekorify2026` |
 
-To start from an empty book instead, delete `prisma/dev.db`, run `npm run db:push`, and
-create your own account at `/signup`.
+The demo account is seeded as the Super Admin. To start from an empty book instead, delete
+`prisma/dev.db`, run `npm run db:push`, set `SUPER_ADMIN_EMAIL` in `.env`, and open the app
+— it will guide you through a one-time `/setup` to create the Super Admin. There is no
+public sign-up.
 
 ### Everyday commands
 
@@ -437,13 +439,12 @@ On every start the app runs `prisma db push` to bring the database schema up to 
 then serves on Railway's `$PORT`. Railway waits for `/api/health` to answer (it checks
 that the database responds) before switching traffic to the new deploy.
 
-The first deploy starts with an empty database, so go to `/signup` and create your
-account.
-
-**Keep it private.** A public URL must not be left open. Set `REQUIRE_LOGIN=true` in
-Railway Variables to force the sign-in page. When it is unset the app opens with no
-authentication (every visitor is treated as the workspace owner), which is only safe on a
-private deployment.
+**Accounts are centrally controlled.** There is no public sign-up. Set `SUPER_ADMIN_EMAIL`
+in Railway Variables to the Super Admin's email; on first run the app sends you to a
+one-time `/setup` page to choose that account's password. The Super Admin then creates and
+manages every other account (Admin and department users) with role-based permissions from
+**Settings → User Management**. If an account with that email already exists, completing
+setup promotes it to Super Admin. Sign-in is always required.
 
 **Shopify on Railway — two ways to connect.**
 

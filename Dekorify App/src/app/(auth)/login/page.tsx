@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
+import { needsSuperAdminSetup } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -10,6 +11,8 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ reset?: string }>;
 }) {
+  // First-run: no account exists yet, send the admin to set one up.
+  if (await needsSuperAdminSetup()) redirect("/setup");
   const params = await searchParams;
 
   return (
@@ -29,13 +32,6 @@ export default async function LoginPage({
       <div className="mt-7">
         <LoginForm />
       </div>
-
-      <p className="mt-7 text-center text-[13.5px] text-muted">
-        Don&apos;t have an account?{" "}
-        <Link href="/signup" className="font-medium text-brand hover:underline">
-          Create one
-        </Link>
-      </p>
     </div>
   );
 }
