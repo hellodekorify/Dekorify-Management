@@ -38,6 +38,43 @@ model User {
   updatedAt    DateTime  @updatedAt
   lastLoginAt  DateTime?
 
+  // --- Account control (Super Admin RBAC) -----------------------------------
+  // accountType gates what a user may ever do: SUPER_ADMIN has everything and
+  // is the only type that can manage other Super Admins; ADMIN and DEPARTMENT
+  // get only what their role/permissions grant. status gates whether they may
+  // sign in at all.
+  accountType String  @default("DEPARTMENT") // SUPER_ADMIN | ADMIN | DEPARTMENT
+  status      String  @default("ACTIVE")     // INVITED | ACTIVE | SUSPENDED | DEACTIVATED
+
+  // The user's role (a named permission set). Null = no granted permissions.
+  roleId String?
+  role   Role?   @relation(fields: [roleId], references: [id])
+
+  // Per-user permission overrides layered on top of the role, as JSON:
+  //   { "add": { "Finance": ["Export"] }, "remove": { "Orders": ["Delete"] } }
+  // Super Admin only ever grants what they themselves hold.
+  permissionOverrides String?
+
+  // Forces a password change on next sign-in (temp password set by an admin).
+  mustChangePassword Boolean @default(false)
+
+  // Directory / HR fields (all optional).
+  department String?
+  jobTitle   String?
+  phone      String?
+  employeeId String?
+  notes      String?
+  expiresAt  DateTime?
+
+  // Who created this account, and the manager they report to (self-relations).
+  createdById String?
+  createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers User[] @relation("UserCreatedBy")
+
+  reportingManagerId String?
+  reportingManager   User?   @relation("UserManager", fields: [reportingManagerId], references: [id])
+  reports            User[]  @relation("UserManager")
+
   stores        StoreMember[]
   sessions      Session[]
   resetTokens   PasswordResetToken[]
@@ -46,6 +83,26 @@ model User {
 
   trackingEvents TrackingEvent[]
   orderNotes     OrderNote[]
+
+  @@index([roleId])
+  @@index([status])
+}
+
+/// A named permission set. `permissions` is JSON: a map of module name to the
+/// list of granted actions, e.g. {"Finance":["View","Export"],"Orders":["View"]}.
+/// System roles are seeded and cannot be deleted; custom roles are created by a
+/// Super Admin. Roles are app-wide (the app is single-store).
+model Role {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  isSystem    Boolean @default(false)
+  permissions String  @default("{}")
+
+  users User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Session {

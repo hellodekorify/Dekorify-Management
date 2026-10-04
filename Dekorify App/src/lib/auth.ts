@@ -3,6 +3,17 @@ import { redirect } from "next/navigation";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
+import {
+  can,
+  parseOverrides,
+  parsePermissionMap,
+  PermissionError,
+  type Action,
+  type AccountStatus,
+  type AccountType,
+  type AuthzUser,
+  type Module,
+} from "./rbac";
 
 export const SESSION_COOKIE = "dekorify_session";
 const SESSION_DAYS = 30;
@@ -71,53 +82,41 @@ export interface CurrentUser {
   id: string;
   email: string;
   name: string;
+  accountType: AccountType;
+  status: AccountStatus;
+  mustChangePassword: boolean;
+  roleId: string | null;
+  roleName: string | null;
+  authz: AuthzUser;
 }
 
 /**
- * Sign-in is switched off unless REQUIRE_LOGIN=true: every visitor is treated
- * as the workspace owner. Set the variable to bring the login page back.
+ * Resolves the signed-in user from the session cookie, including their
+ * authorization data (account type, status, role permissions and overrides).
+ * Returns null when there is no valid session — sign-in is always required.
  */
-export function isLoginRequired(): boolean {
-  return process.env.REQUIRE_LOGIN?.trim().toLowerCase() === "true";
-}
-
-const OPEN_ACCESS_EMAIL = "owner@dekorify.local";
-
-/** The first account ever created, or a placeholder owner on an empty database. */
-async function openAccessUser(): Promise<CurrentUser> {
-  const first = await prisma.user.findFirst({
-    orderBy: { createdAt: "asc" },
-    select: { id: true, email: true, name: true },
-  });
-  if (first) return first;
-
-  return prisma.user.upsert({
-    where: { email: OPEN_ACCESS_EMAIL },
-    update: {},
-    create: {
-      email: OPEN_ACCESS_EMAIL,
-      name: "Owner",
-      // Unusable password: nobody signs in as this account, it only owns data.
-      passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
-    },
-    select: { id: true, email: true, name: true },
-  });
-}
-
 export async function getCurrentUser(): Promise<CurrentUser | null> {
-  const user = await sessionUser();
-  if (user || isLoginRequired()) return user;
-  return openAccessUser();
-}
-
-async function sessionUser(): Promise<CurrentUser | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
   const session = await prisma.session.findUnique({
     where: { id: hashToken(token) },
-    include: { user: { select: { id: true, email: true, name: true } } },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          accountType: true,
+          status: true,
+          mustChangePassword: true,
+          roleId: true,
+          permissionOverrides: true,
+          role: { select: { name: true, permissions: true } },
+        },
+      },
+    },
   });
 
   if (!session) return null;
@@ -127,13 +126,83 @@ async function sessionUser(): Promise<CurrentUser | null> {
     return null;
   }
 
-  return session.user;
+  const u = session.user;
+  const accountType = (u.accountType as AccountType) ?? "DEPARTMENT";
+  const status = (u.status as AccountStatus) ?? "ACTIVE";
+
+  // A session that outlives the account being suspended/deactivated must not
+  // keep working: deny immediately.
+  if (status === "SUSPENDED" || status === "DEACTIVATED") return null;
+
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    accountType,
+    status,
+    mustChangePassword: u.mustChangePassword,
+    roleId: u.roleId,
+    roleName: u.role?.name ?? null,
+    authz: {
+      id: u.id,
+      accountType,
+      status,
+      rolePermissions: parsePermissionMap(u.role?.permissions),
+      overrides: parseOverrides(u.permissionOverrides),
+    },
+  };
 }
 
 export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // A user with a temp password must set a real one before using the app.
+  if (user.mustChangePassword) redirect("/change-password");
   return user;
+}
+
+/**
+ * Enforces a (module, action) permission for the current request. Redirects to
+ * login when unauthenticated, to a forbidden page when authenticated but not
+ * permitted. This is the authoritative check — UI gating is cosmetic.
+ */
+export async function requirePermission(module: Module, action: Action): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (!can(user.authz, module, action)) redirect("/forbidden");
+  return user;
+}
+
+/** Non-redirecting check for use inside server actions and API routes. */
+export async function assertPermission(module: Module, action: Action): Promise<CurrentUser> {
+  const user = await getCurrentUser();
+  if (!user) throw new PermissionError(module, action);
+  if (!can(user.authz, module, action)) throw new PermissionError(module, action);
+  return user;
+}
+
+// ---------------------------------------------------------------------------
+// Super Admin bootstrap
+//
+// The first Super Admin is declared by the SUPER_ADMIN_EMAIL environment
+// variable and given a password through a one-time /setup page, so no password
+// is ever hard-coded or shown by default. Until that is done the app routes
+// every request to /setup.
+// ---------------------------------------------------------------------------
+
+export function superAdminEmail(): string | null {
+  const raw = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  return raw && raw.length > 0 ? raw : null;
+}
+
+/** True when SUPER_ADMIN_EMAIL is set but that account has not been activated. */
+export async function needsSuperAdminSetup(): Promise<boolean> {
+  const email = superAdminEmail();
+  if (!email) return false;
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { accountType: true, status: true },
+  });
+  return !(existing && existing.accountType === "SUPER_ADMIN" && existing.status === "ACTIVE");
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +271,8 @@ export interface AppContext {
 
 /** Every page and mutation in the app area goes through this. */
 export async function requireContext(): Promise<AppContext> {
+  // Before anything else, force first-run Super Admin setup.
+  if (await needsSuperAdminSetup()) redirect("/setup");
   const user = await requireUser();
   const store = await getCurrentStore(user.id);
   // /new-store sits outside the app shell precisely so this cannot loop.

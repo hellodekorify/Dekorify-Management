@@ -127,8 +127,14 @@ async function main() {
 
   const user = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
-    update: { passwordHash },
-    create: { email: DEMO_EMAIL, name: "Dekorify Owner", passwordHash },
+    update: { passwordHash, accountType: "SUPER_ADMIN", status: "ACTIVE" },
+    create: {
+      email: DEMO_EMAIL,
+      name: "Dekorify Owner",
+      passwordHash,
+      accountType: "SUPER_ADMIN",
+      status: "ACTIVE",
+    },
   });
 
   // Start the demo store clean so re-seeding never doubles the figures.
