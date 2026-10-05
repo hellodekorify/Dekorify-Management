@@ -51,8 +51,13 @@ export function shopifyApiVersion(): string {
 /**
  * The public address Shopify redirects to and posts webhooks at. On Railway the
  * service's generated domain is used when SHOPIFY_APP_URL is not set.
+ *
+ * This must be used as the base for every OAuth redirect: behind a proxy
+ * (Railway), a request's own URL resolves to the internal bind host
+ * (0.0.0.0:$PORT), so redirecting relative to it sends the browser to an
+ * unreachable address.
  */
-function appUrl(): string {
+export function publicAppUrl(): string {
   const explicit = process.env.SHOPIFY_APP_URL?.trim();
   const railway = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
   const url = explicit || (railway ? `https://${railway}` : "http://localhost:3000");
@@ -69,7 +74,7 @@ export function readShopifyConfig(): ShopifyConfig | null {
     apiKey,
     apiSecret,
     scopes: process.env.SHOPIFY_SCOPES?.trim() || REQUIRED_ADMIN_SCOPES.join(","),
-    appUrl: appUrl(),
+    appUrl: publicAppUrl(),
     apiVersion: shopifyApiVersion(),
   };
 }

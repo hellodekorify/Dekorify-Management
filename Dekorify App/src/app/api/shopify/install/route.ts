@@ -5,31 +5,36 @@ import {
   OAUTH_SHOP_COOKIE,
   OAUTH_STATE_COOKIE,
   normaliseShopDomain,
+  publicAppUrl,
   readShopifyConfig,
 } from "@/lib/shopify/config";
 import { buildAuthorizeUrl, generateNonce } from "@/lib/shopify/oauth";
 
 export async function GET(request: Request) {
+  // Redirects use the public app URL, not request.url: behind Railway's proxy
+  // the latter is the internal bind host (0.0.0.0:$PORT) and is unreachable.
+  const redirectTo = (path: string) => NextResponse.redirect(new URL(path, publicAppUrl()));
+
   const user = await getCurrentUser();
   if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return redirectTo("/login");
   }
 
   const store = await getCurrentStore(user.id);
   if (!store) {
-    return NextResponse.redirect(new URL("/settings/new-store", request.url));
+    return redirectTo("/settings/new-store");
   }
 
   const config = readShopifyConfig();
   if (!config) {
-    return NextResponse.redirect(new URL("/settings/shopify?error=not_configured", request.url));
+    return redirectTo("/settings/shopify?error=not_configured");
   }
 
   const requested = new URL(request.url).searchParams.get("shop") ?? "";
   const shop = normaliseShopDomain(requested);
 
   if (!shop) {
-    return NextResponse.redirect(new URL("/settings/shopify?error=invalid_shop", request.url));
+    return redirectTo("/settings/shopify?error=invalid_shop");
   }
 
   // The nonce ties the callback to this browser session, so a stray callback

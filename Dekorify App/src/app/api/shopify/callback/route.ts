@@ -7,6 +7,7 @@ import {
   OAUTH_SHOP_COOKIE,
   OAUTH_STATE_COOKIE,
   normaliseShopDomain,
+  publicAppUrl,
   readShopifyConfig,
 } from "@/lib/shopify/config";
 import { exchangeCodeForToken, verifyCallbackHmac } from "@/lib/shopify/oauth";
@@ -15,8 +16,15 @@ import { registerWebhooks } from "@/lib/shopify/webhooks";
 import { ensureLeopardsCourier } from "@/lib/leopards/courier";
 import { safeEqual } from "@/lib/auth";
 
-function fail(request: Request, reason: string) {
-  return NextResponse.redirect(new URL(`/settings/shopify?error=${reason}`, request.url));
+// Redirects must use the public app URL, never the request's own URL: behind
+// Railway's proxy the latter is the internal bind host (0.0.0.0:$PORT), which
+// the browser cannot reach.
+function redirectTo(path: string) {
+  return NextResponse.redirect(new URL(path, publicAppUrl()));
+}
+
+function fail(reason: string) {
+  return redirectTo(`/settings/shopify?error=${reason}`);
 }
 
 export async function GET(request: Request) {
@@ -24,13 +32,13 @@ export async function GET(request: Request) {
   const params = url.searchParams;
 
   const config = readShopifyConfig();
-  if (!config) return fail(request, "not_configured");
+  if (!config) return fail("not_configured");
 
   const user = await getCurrentUser();
-  if (!user) return NextResponse.redirect(new URL("/login", request.url));
+  if (!user) return redirectTo("/login");
 
   const store = await getCurrentStore(user.id);
-  if (!store) return NextResponse.redirect(new URL("/settings/new-store", request.url));
+  if (!store) return redirectTo("/settings/new-store");
 
   const cookieStore = await cookies();
   const expectedState = cookieStore.get(OAUTH_STATE_COOKIE)?.value;
@@ -41,19 +49,19 @@ export async function GET(request: Request) {
 
   const state = params.get("state");
   if (!expectedState || !state || !safeEqual(expectedState, state)) {
-    return fail(request, "state_mismatch");
+    return fail("state_mismatch");
   }
 
   // Signature check before anything else is trusted.
   if (!verifyCallbackHmac(params, config.apiSecret)) {
-    return fail(request, "bad_signature");
+    return fail("bad_signature");
   }
 
   const shop = normaliseShopDomain(params.get("shop") ?? "");
-  if (!shop || shop !== expectedShop) return fail(request, "invalid_shop");
+  if (!shop || shop !== expectedShop) return fail("invalid_shop");
 
   const code = params.get("code");
-  if (!code) return fail(request, "missing_code");
+  if (!code) return fail("missing_code");
 
   try {
     const { access_token, scope } = await exchangeCodeForToken(shop, code);
@@ -108,11 +116,9 @@ export async function GET(request: Request) {
       console.error("Webhook registration failed:", error);
     }
 
-    return NextResponse.redirect(
-      new URL(`/settings/shopify?connected=1${webhookNote}`, request.url),
-    );
+    return redirectTo(`/settings/shopify?connected=1${webhookNote}`);
   } catch (error) {
     console.error("Shopify OAuth callback failed:", error);
-    return fail(request, "exchange_failed");
+    return fail("exchange_failed");
   }
 }
