@@ -35,9 +35,24 @@ export function formatPktShort(value: Date | string | null | undefined): string 
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: PKT,
+  }).format(date);
+}
+
+/** Date only, for values Leopards gives without a time (e.g. the booking date). */
+export function formatPktDate(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
     timeZone: PKT,
   }).format(date);
 }

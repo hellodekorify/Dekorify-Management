@@ -18,7 +18,7 @@ export interface ShipmentFilters {
   to?: string;
   page?: number;
   perPage?: number;
-  sort?: "recent" | "oldest" | "cn" | "status";
+  sort?: "booked_asc" | "booked_desc" | "recent" | "oldest" | "cn" | "status";
 }
 
 export const PER_PAGE = 50;
@@ -87,6 +87,9 @@ function buildWhere(storeId: string, filters: ShipmentFilters) {
 }
 
 const ORDER_BY = {
+  // Nulls sort first on SQLite ascending; unbooked/unfetched rows lead.
+  booked_asc: [{ bookedAt: "asc" as const }, { trackingNumber: "asc" as const }],
+  booked_desc: [{ bookedAt: "desc" as const }, { trackingNumber: "asc" as const }],
   recent: [{ lastEventAt: "desc" as const }, { updatedAt: "desc" as const }],
   oldest: [{ lastEventAt: "asc" as const }],
   cn: [{ trackingNumber: "asc" as const }],
@@ -101,7 +104,7 @@ export async function listShipments(storeId: string, filters: ShipmentFilters) {
   const [rows, total] = await Promise.all([
     prisma.leopardsShipment.findMany({
       where,
-      orderBy: ORDER_BY[filters.sort ?? "recent"],
+      orderBy: ORDER_BY[filters.sort ?? "booked_asc"],
       skip: (page - 1) * perPage,
       take: perPage,
     }),

@@ -230,11 +230,13 @@ export function TrackingFilters({ locations }: { locations: string[] }) {
       />
 
       <select
-        value={params.get("sort") ?? "recent"}
+        value={params.get("sort") ?? "booked_asc"}
         onChange={(event) => push({ sort: event.target.value })}
         aria-label="Sort"
         className={selectClass}
       >
+        <option value="booked_asc">Booked date: oldest first</option>
+        <option value="booked_desc">Booked date: newest first</option>
         <option value="recent">Newest update first</option>
         <option value="oldest">Oldest update first</option>
         <option value="cn">CN number</option>
