@@ -5,7 +5,7 @@ import { requireContext, requirePermission } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { LEOPARDS_CODE, resolveCredentials } from "@/lib/leopards/courier";
 import { prisma } from "@/lib/db";
-import { knownLocations, listShipments, shipmentCounts, SUMMARY_CARDS } from "@/lib/leopards/queries";
+import { knownLocations, listShipments, shipmentCounts, SUMMARY_CARDS, type ShipmentFilters } from "@/lib/leopards/queries";
 import { readTrackingSettings } from "@/lib/leopards/settings";
 import { lastSuccessfulSync, lastSync } from "@/lib/leopards/sync-tracking";
 import {
@@ -13,7 +13,7 @@ import {
   SHIPMENT_STATUS_TONES,
   type ShipmentStatus,
 } from "@/lib/leopards/statuses";
-import { formatCod, formatPktShort, relativeTime } from "@/lib/leopards/format";
+import { formatCod, formatPktDate, formatPktShort, relativeTime } from "@/lib/leopards/format";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
@@ -46,7 +46,7 @@ export default async function TrackingPage({ searchParams }: PageProps) {
     search: one(params.search),
     from: one(params.from),
     to: one(params.to),
-    sort: (one(params.sort) ?? "recent") as "recent" | "oldest" | "cn" | "status",
+    sort: (one(params.sort) ?? "booked_asc") as NonNullable<ShipmentFilters["sort"]>,
     page: Number(one(params.page) ?? 1) || 1,
   };
 
@@ -229,7 +229,7 @@ export default async function TrackingPage({ searchParams }: PageProps) {
                           <TD align="right" className="tabular">
                             {formatCod(row.codAmount)}
                           </TD>
-                          <TD>{formatPktShort(row.bookedAt)}</TD>
+                          <TD>{formatPktDate(row.bookedAt)}</TD>
                           <TD>
                             <div className="flex flex-col">
                               <span>{formatPktShort(row.lastEventAt)}</span>
