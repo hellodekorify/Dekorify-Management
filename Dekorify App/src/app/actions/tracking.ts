@@ -18,6 +18,11 @@ import {
 import { syncTracking } from "@/lib/leopards/sync-tracking";
 import { prisma } from "@/lib/db";
 
+/** Parcels asked about per drain pass; matches the sync engine's own scale. */
+const DRAIN_CHUNK = 200;
+/** Stop starting new passes once a refresh has used this long. */
+const REFRESH_BUDGET_MS = 120_000;
+
 export interface TrackingActionResult {
   ok: boolean;
   message: string;
@@ -37,22 +42,76 @@ export async function refreshTrackingAction(
   const { store } = await requireContext();
 
   try {
-    const outcome = await syncTracking({
+    const started = Date.now();
+    let outcome = await syncTracking({
       storeId: store.id,
       trigger: "MANUAL",
       force: !trackingNumber,
       only: trackingNumber ? [trackingNumber] : undefined,
     });
 
+    const total = {
+      checked: outcome.checked,
+      updated: outcome.updated,
+      failed: outcome.failed,
+      missing: [...outcome.missing],
+    };
+    let stillNeverFetched = 0;
+
+    // A whole-store refresh keeps going until every never-fetched parcel has
+    // been asked about, in chunks so one request cannot run past its time
+    // budget. A single-parcel refresh never loops.
+    if (!trackingNumber) {
+      let lastRunMs = outcome.durationMs;
+
+      while (outcome.ok) {
+        const pending = await prisma.leopardsShipment.findMany({
+          where: { storeId: store.id, lastSyncedAt: null },
+          select: { trackingNumber: true },
+          take: DRAIN_CHUNK,
+        });
+        stillNeverFetched = pending.length;
+        if (pending.length === 0) break;
+        if (Date.now() - started + lastRunMs > REFRESH_BUDGET_MS) break;
+
+        outcome = await syncTracking({
+          storeId: store.id,
+          trigger: "MANUAL",
+          only: pending.map((row) => row.trackingNumber),
+        });
+        lastRunMs = outcome.durationMs;
+        total.checked += outcome.checked;
+        total.updated += outcome.updated;
+        total.failed += outcome.failed;
+        total.missing.push(...outcome.missing);
+      }
+
+      if (stillNeverFetched > 0) {
+        stillNeverFetched = await prisma.leopardsShipment.count({
+          where: { storeId: store.id, lastSyncedAt: null },
+        });
+      }
+    }
+
     revalidatePath("/tracking");
+    revalidatePath("/tracking/daily");
     if (trackingNumber) revalidatePath(`/tracking/${trackingNumber}`);
+
+    const parts = [`Checked ${total.checked}`, `updated ${total.updated}`];
+    if (total.missing.length > 0) parts.push(`${total.missing.length} not found at Leopards`);
+    if (total.failed > 0) parts.push(`${total.failed} failed`);
+    if (stillNeverFetched > 0) {
+      parts.push(`${stillNeverFetched} not fetched yet — press Refresh again`);
+    }
 
     return {
       ok: outcome.ok,
-      message: outcome.message,
+      message: outcome.ok ? `${parts.join(", ")}.` : outcome.message,
       detail:
-        outcome.missing.length > 0
-          ? `Leopards has no record of: ${outcome.missing.join(", ")}`
+        total.missing.length > 0
+          ? `Leopards has no record of: ${total.missing.slice(0, 20).join(", ")}${
+              total.missing.length > 20 ? ` and ${total.missing.length - 20} more` : ""
+            }`
           : undefined,
     };
   } catch (error) {

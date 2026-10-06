@@ -46,7 +46,7 @@ export default async function TrackingPage({ searchParams }: PageProps) {
     search: one(params.search),
     from: one(params.from),
     to: one(params.to),
-    sort: (one(params.sort) ?? "booked_asc") as NonNullable<ShipmentFilters["sort"]>,
+    sort: (one(params.sort) ?? "booked_desc") as NonNullable<ShipmentFilters["sort"]>,
     page: Number(one(params.page) ?? 1) || 1,
   };
 
@@ -71,6 +71,9 @@ export default async function TrackingPage({ searchParams }: PageProps) {
         description="Every parcel as Leopards Courier reports it. Tracking numbers are picked up from Shopify fulfillments; every detail shown is fetched from Leopards."
         actions={
           <div className="flex items-center gap-2.5">
+            <LinkButton href="/tracking/daily" variant="secondary">
+              Daily movement
+            </LinkButton>
             <RefreshButton />
             <AddShipmentsButton />
           </div>
