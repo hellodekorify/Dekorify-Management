@@ -13,7 +13,7 @@ import {
   SHIPMENT_STATUS_TONES,
   type ShipmentStatus,
 } from "@/lib/leopards/statuses";
-import { formatPktShort, relativeTime } from "@/lib/leopards/format";
+import { formatCod, formatPktShort, relativeTime } from "@/lib/leopards/format";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
@@ -68,7 +68,7 @@ export default async function TrackingPage({ searchParams }: PageProps) {
     <>
       <PageHeader
         title="Shipment tracking"
-        description="Every parcel as Leopards Courier reports it. Nothing on this page comes from any other system."
+        description="Every parcel as Leopards Courier reports it. Tracking numbers are picked up from Shopify fulfillments; every detail shown is fetched from Leopards."
         actions={
           <div className="flex items-center gap-2.5">
             <RefreshButton />
@@ -146,7 +146,7 @@ export default async function TrackingPage({ searchParams }: PageProps) {
                 <EmptyState
                   icon={Radar}
                   title="No shipments are being tracked yet"
-                  description="Leopards has no endpoint that lists your parcels, so the CN numbers have to be added here. Paste them in and every detail is fetched from Leopards."
+                  description="Leopards has no endpoint that lists your parcels. CN numbers are picked up from Shopify fulfillments on each refresh, or you can paste them in. Every detail is fetched from Leopards."
                 />
               ) : (
                 <EmptyState
@@ -163,10 +163,14 @@ export default async function TrackingPage({ searchParams }: PageProps) {
                   <TH>CN number</TH>
                   <TH>Reference</TH>
                   <TH>Status</TH>
+                  <TH>Consignee</TH>
+                  <TH>Route</TH>
                   <TH>Current location</TH>
+                  <TH align="right">COD</TH>
+                  <TH>Booked</TH>
                   <TH>Last update</TH>
                   <TH align="right">Attempts</TH>
-                  <TH>Destination</TH>
+                  <TH>Delivered</TH>
                   <TH align="right">Action</TH>
                 </THead>
                 <tbody>
@@ -201,10 +205,31 @@ export default async function TrackingPage({ searchParams }: PageProps) {
                             </div>
                           </TD>
                           <TD>
+                            <div className="flex flex-col">
+                              <span className={row.consigneeName ? "" : "text-muted italic"}>
+                                {row.consigneeName ?? "not provided"}
+                              </span>
+                              {row.consigneePhone && (
+                                <span className="text-[11.5px] text-muted">{row.consigneePhone}</span>
+                              )}
+                            </div>
+                          </TD>
+                          <TD>
+                            {row.originCity || row.destinationCity ? (
+                              `${row.originCity ?? "—"} → ${row.destinationCity ?? "—"}`
+                            ) : (
+                              <span className="text-muted italic">—</span>
+                            )}
+                          </TD>
+                          <TD>
                             <span className={row.currentLocation ? "" : "text-muted italic"}>
                               {row.currentLocation ?? "not provided"}
                             </span>
                           </TD>
+                          <TD align="right" className="tabular">
+                            {formatCod(row.codAmount)}
+                          </TD>
+                          <TD>{formatPktShort(row.bookedAt)}</TD>
                           <TD>
                             <div className="flex flex-col">
                               <span>{formatPktShort(row.lastEventAt)}</span>
@@ -218,7 +243,7 @@ export default async function TrackingPage({ searchParams }: PageProps) {
                           <TD align="right" className="tabular">
                             {row.deliveryAttempts}
                           </TD>
-                          <TD>{row.destinationCity ?? <span className="text-muted italic">—</span>}</TD>
+                          <TD>{formatPktShort(row.deliveredAt)}</TD>
                           <TD align="right">
                             <LinkButton href={`/tracking/${row.trackingNumber}`} variant="ghost">
                               History
