@@ -15,6 +15,7 @@
 import { prisma } from "../db";
 import { LeopardsError } from "./client";
 import { resolveCredentials, LEOPARDS_CODE } from "./courier";
+import { seedFromOrderShipments } from "./intake";
 import { readTrackingSettings } from "./settings";
 import { fetchTracking, TRACK_BATCH_SIZE, type NormalisedPacket } from "./tracking";
 
@@ -66,6 +67,16 @@ export async function syncTracking(options: SyncOptions): Promise<SyncOutcome> {
       message:
         "Leopards API credentials are not configured. Add them in Settings → Tracking.",
     });
+  }
+
+  // Pick up CNs from Shopify fulfillments so the list needs no manual entry.
+  // A seeding failure must not stop the Leopards fetch itself.
+  if (!only || only.length === 0) {
+    try {
+      await seedFromOrderShipments(storeId);
+    } catch {
+      // Existing shipments are still synchronised below.
+    }
   }
 
   const settings = await readTrackingSettings(storeId);

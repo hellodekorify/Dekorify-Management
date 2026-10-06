@@ -18,6 +18,9 @@
  *   CSV     pasted or uploaded, e.g. a booked-packets export downloaded from
  *           the Leopards merchant portal by hand
  *   BOOKED  created by this app through `bookPacket`, which returns the CN
+ *   SHOPIFY a tracking number already on an order's shipment (from a Shopify
+ *           fulfillment). Only the CN is borrowed — every displayed field is
+ *           still fetched from Leopards. See `seedFromOrderShipments`.
  *
  * BOOKED is the one that closes the loop: book through the app and the CN is
  * known from birth, with no import step at all.
@@ -25,7 +28,7 @@
 
 import { prisma } from "../db";
 
-export const INTAKE_SOURCES = ["MANUAL", "CSV", "BOOKED"] as const;
+export const INTAKE_SOURCES = ["MANUAL", "CSV", "BOOKED", "SHOPIFY"] as const;
 export type IntakeSource = (typeof INTAKE_SOURCES)[number];
 
 /**
@@ -120,4 +123,35 @@ export async function removeShipment(storeId: string, trackingNumber: string): P
     where: { storeId, trackingNumber },
   });
   return deleted.count > 0;
+}
+
+/**
+ * Queue every CN the order system already knows about.
+ *
+ * Shopify fulfillments (webhook or sync) become `Shipment` rows carrying the CN;
+ * this copies those numbers across so they are fetched from Leopards without a
+ * manual paste. Shipments assigned to a different courier are left alone.
+ * Idempotent: existing CNs are skipped, so it is safe to call on every sync.
+ */
+export async function seedFromOrderShipments(storeId: string): Promise<IntakeResult> {
+  const courier = await prisma.courier.findUnique({
+    where: { storeId_code: { storeId, code: "LEOPARDS" } },
+    select: { id: true },
+  });
+
+  const rows = await prisma.shipment.findMany({
+    where: {
+      storeId,
+      deletedAt: null,
+      trackingNumber: { not: null },
+      OR: [{ courierId: null }, ...(courier ? [{ courierId: courier.id }] : [])],
+    },
+    select: { trackingNumber: true },
+  });
+
+  return addTrackingNumbers(
+    storeId,
+    rows.map((row) => row.trackingNumber).filter((cn): cn is string => Boolean(cn)),
+    "SHOPIFY",
+  );
 }
